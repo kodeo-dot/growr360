@@ -15,7 +15,11 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publi
 
 type View = "mapa" | "campos" | "registros" | "reportes" | "equipo";
 type Group = { id: string; name: string; description?: string | null };
-type Membership = { group_id: string; role: string; status: string; groups: Group | Group[] | null };
+type PermissionOverride = { permission: string; allowed: boolean };
+type Membership = {
+  group_id: string; role: string; status: string; groups: Group | Group[] | null;
+  member_permission_overrides?: PermissionOverride[] | null;
+};
 type Profile = { id: string; first_name: string; last_name: string; username: string; email: string };
 type Field = { id: string; group_id: string; name: string; total_area: number | string; arable_area: number | string; locality?: string | null; province?: string | null };
 type Plot = {
@@ -131,49 +135,67 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) ?? null;
   const activeMembership = memberships.find(m => m.group_id === groupId);
+  const canManageLots = useMemo(() => {
+    if (!activeMembership) return false;
+    if (activeMembership.role === "owner") return true;
+    const override = activeMembership.member_permission_overrides?.find(item => item.permission === "manage_lots");
+    if (override) return override.allowed;
+    return activeMembership.role === "admin";
+  }, [activeMembership]);
 
-  const loadWorkspace = useCallback(async (requestedGroup?: string, quiet = false) => {
-    if (!quiet) setLoading(true); else setSyncing(true);
+  const loadGroupData = useCallback(async (targetGroup: string, quiet = false) => {
+    if (quiet) setSyncing(true);
     setError("");
-    const userId = session.user.id;
-    const [profileResult, membershipResult] = await Promise.all([
-      supabase.from("profiles").select("id,first_name,last_name,username,email").eq("id", userId).single(),
-      supabase.from("group_members").select("group_id,role,status,groups(id,name,description)").eq("user_id", userId).eq("status", "active").order("created_at")
-    ]);
-    if (profileResult.data) setProfile(profileResult.data as Profile);
-    if (membershipResult.error) {
-      setError(membershipResult.error.message);
-      setLoading(false); setSyncing(false); return;
-    }
-    const rows = (membershipResult.data ?? []) as unknown as Membership[];
-    setMemberships(rows);
-    const stored = localStorage.getItem("growr360-web-group");
-    const nextGroup = requestedGroup && rows.some(m => m.group_id === requestedGroup)
-      ? requestedGroup
-      : stored && rows.some(m => m.group_id === stored) ? stored : rows[0]?.group_id ?? "";
-    setGroupId(nextGroup);
-    if (!nextGroup) {
-      setFields([]); setPlots([]); setRecords([]); setMembers([]);
-      setLoading(false); setSyncing(false); return;
-    }
-    localStorage.setItem("growr360-web-group", nextGroup);
     const [fieldResult, plotResult, recordResult, memberResult] = await Promise.all([
-      supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", nextGroup).is("deleted_at", null).order("name"),
-      supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", nextGroup).is("deleted_at", null).order("name"),
-      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,fields(name),plots(name),campaigns(name)").eq("group_id", nextGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(100),
-      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", nextGroup).eq("status", "active").order("created_at")
+      supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
+      supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
+      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,fields(name),plots(name),campaigns(name)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(100),
+      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", targetGroup).eq("status", "active").order("created_at")
     ]);
     if (fieldResult.error || plotResult.error) setError(fieldResult.error?.message ?? plotResult.error?.message ?? "");
     setFields((fieldResult.data ?? []) as Field[]);
     setPlots((plotResult.data ?? []) as unknown as Plot[]);
     setRecords((recordResult.data ?? []) as unknown as RecordRow[]);
     setMembers((memberResult.data ?? []) as unknown as Member[]);
-    setLoading(false); setSyncing(false);
-  }, [session.user.id]);
+    setSyncing(false);
+  }, []);
+
+  const loadWorkspace = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    const userId = session.user.id;
+    const [profileResult, membershipResult] = await Promise.all([
+      supabase.from("profiles").select("id,first_name,last_name,username,email").eq("id", userId).single(),
+      supabase.from("group_members").select("group_id,role,status,groups(id,name,description),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at")
+    ]);
+    if (profileResult.data) setProfile(profileResult.data as Profile);
+    if (membershipResult.error) {
+      setError(membershipResult.error.message);
+      setLoading(false); return;
+    }
+    const rows = (membershipResult.data ?? []) as unknown as Membership[];
+    setMemberships(rows);
+    const stored = localStorage.getItem("growr360-web-group");
+    const nextGroup = stored && rows.some(m => m.group_id === stored) ? stored : rows[0]?.group_id ?? "";
+    setGroupId(nextGroup);
+    if (nextGroup) {
+      localStorage.setItem("growr360-web-group", nextGroup);
+      await loadGroupData(nextGroup);
+    } else {
+      setFields([]); setPlots([]); setRecords([]); setMembers([]);
+    }
+    setLoading(false);
+  }, [loadGroupData, session.user.id]);
 
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
 
-  const switchGroup = (id: string) => void loadWorkspace(id);
+  const switchGroup = (id: string) => {
+    setGroupId(id);
+    setSelectedPlotId(null);
+    setFields([]); setPlots([]); setRecords([]); setMembers([]);
+    localStorage.setItem("growr360-web-group", id);
+    void loadGroupData(id, true);
+  };
   const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || session.user.email || "Usuario";
 
   if (loading) return <LoadingScreen text="Cargando tus campos y lotes…"/>;
@@ -195,11 +217,11 @@ function AuthenticatedApp({ session }: { session: Session }) {
     <main>
       <header className="topbar">
         <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : subtitle(view)}</p></div></div>
-        <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => void loadWorkspace(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
+        <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={plots} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} onSaved={() => void loadWorkspace(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={plots} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={plots} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>}
         {view === "registros" && <RealRecordsView records={records}/>}
         {view === "reportes" && <RealReportsView fields={fields} plots={plots} records={records}/>}
@@ -209,9 +231,9 @@ function AuthenticatedApp({ session }: { session: Session }) {
   </div>;
 }
 
-function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, userId, onSaved }: {
+function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onSaved }: {
   fields: Field[]; plots: Plot[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
-  groupId: string; userId: string; onSaved: () => void;
+  groupId: string; userId: string; canManageLots: boolean; onSaved: () => void;
 }) {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -299,7 +321,7 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
   useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current, points); }, [points, refreshSources]);
 
   function startDrawing() {
-    if (!fields.length) return;
+    if (!fields.length || !canManageLots) return;
     setSelectedPlot(null); setDraft(null); setPoints([]); setDrawing(true);
   }
   function cancelDrawing() { setDrawing(false); setPoints([]); setDraft(null); }
@@ -313,7 +335,7 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     <div ref={mapNode} className="map-canvas"/>
     <div className="map-search"><Search/><span>{mapPlots.length} lotes georreferenciados</span></div>
     {!drawing && !draft && <div className="map-toolbar">
-      <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length}><Plus/><span>Dibujar lote</span></button>
+      <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : ""}><Plus/><span>Dibujar lote</span></button>
       <button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)}><MapPin/><span>Ver todos</span></button>
       <button onClick={onSaved}><RotateCcw/><span>Actualizar</span></button>
     </div>}
@@ -322,6 +344,7 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
     {selectedPlot && !drawing && !draft && <RealPlotPanel plot={selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} onClose={() => setSelectedPlot(null)}/>}
     {!fields.length && <div className="map-empty-hint">Primero necesitás crear un campo desde la aplicación móvil para poder asociar el lote.</div>}
+    {fields.length > 0 && !canManageLots && <div className="map-permission-hint">Podés consultar el mapa, pero tu función no tiene el permiso “Administrar lotes”. Un dueño o administrador puede habilitarlo desde Miembros y grupo.</div>}
   </div>;
 }
 
