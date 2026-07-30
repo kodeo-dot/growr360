@@ -7,13 +7,13 @@ import {
   Activity, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleUserRound, FileText, Filter, Grid2X2, Layers3, Leaf, LoaderCircle, LogOut,
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
-  TrendingUp, Undo2, Users, X
+  TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_waHR1lcMgPHyP32KlyBcEw_uAL6n6-g";
 
-type View = "mapa" | "campos" | "registros" | "reportes" | "equipo";
+type View = "mapa" | "campos" | "registros" | "reportes" | "equipo" | "configuracion";
 type Group = { id: string; name: string; description?: string | null };
 type PermissionOverride = { permission: string; allowed: boolean };
 type Membership = {
@@ -26,12 +26,18 @@ type Plot = {
   id: string; group_id: string; field_id: string; name: string; total_area: number | string;
   arable_area: number | string; geometry_json: GeoFeature | string | null; priority_color?: string | null;
   fields?: { name: string } | { name: string }[] | null; allow_member_edits?: boolean;
+  cropName?: string | null; cropColor?: string | null;
 };
 type RecordRow = {
   id: string; record_type: string; record_date: string; worked_area?: number | string | null;
   field_id?: string | null; plot_id?: string | null; fields?: { name: string } | null;
-  plots?: { name: string } | null; campaigns?: { name: string } | null;
+  plots?: { name: string } | null; campaigns?: { id?: string; name: string } | null;
+  campaign_id?: string | null; details?: Record<string, string | number | boolean | null> | null;
 };
+type Crop = { id: string; name: string; group_id?: string | null };
+type PlotCampaign = { plot_id: string; campaign_id: string; crop_id: string; campaigns?: { id: string; name: string; status?: string } | null; crops?: { id: string; name: string } | null };
+type CropColor = { crop_id: string; color: string };
+type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
 type Member = { user_id: string; role: string; status: string; profiles?: Profile | null };
 type GeoFeature = {
   type: "Feature";
@@ -39,6 +45,7 @@ type GeoFeature = {
   properties?: Record<string, unknown>;
 };
 type MapPlot = Plot & { feature: GeoFeature; fieldName: string };
+type SatelliteScene = { id: string; date: string; cloud: number; satellite: string };
 
 const nav = [
   { id: "mapa" as View, label: "Mapa", icon: Map },
@@ -130,6 +137,10 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [plots, setPlots] = useState<Plot[]>([]);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [crops, setCrops] = useState<Crop[]>([]);
+  const [assignments, setAssignments] = useState<PlotCampaign[]>([]);
+  const [cropColors, setCropColors] = useState<CropColor[]>([]);
+  const [settings, setSettings] = useState<AppSettings>({ appearance: "system", area_unit: "ha", date_format: "dd-MM-yyyy", notifications_enabled: true });
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
@@ -146,19 +157,27 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const loadGroupData = useCallback(async (targetGroup: string, quiet = false) => {
     if (quiet) setSyncing(true);
     setError("");
-    const [fieldResult, plotResult, recordResult, memberResult] = await Promise.all([
+    const [fieldResult, plotResult, recordResult, memberResult, cropResult, assignmentResult, colorResult, settingsResult] = await Promise.all([
       supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
-      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,fields(name),plots(name),campaigns(name)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(100),
-      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", targetGroup).eq("status", "active").order("created_at")
+      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,campaign_id,details,fields(name),plots(name),campaigns(id,name)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(500),
+      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", targetGroup).eq("status", "active").order("created_at"),
+      supabase.from("crops").select("id,name,group_id").or(`group_id.is.null,group_id.eq.${targetGroup}`).is("deleted_at", null).order("name"),
+      supabase.from("plot_campaigns").select("plot_id,campaign_id,crop_id,campaigns(id,name,status),crops(id,name)").eq("group_id", targetGroup).is("deleted_at", null),
+      supabase.from("group_crop_colors").select("crop_id,color").eq("group_id", targetGroup),
+      supabase.from("app_settings").select("appearance,area_unit,date_format,notifications_enabled").eq("group_id", targetGroup).eq("user_id", session.user.id).maybeSingle()
     ]);
     if (fieldResult.error || plotResult.error) setError(fieldResult.error?.message ?? plotResult.error?.message ?? "");
     setFields((fieldResult.data ?? []) as Field[]);
     setPlots((plotResult.data ?? []) as unknown as Plot[]);
     setRecords((recordResult.data ?? []) as unknown as RecordRow[]);
     setMembers((memberResult.data ?? []) as unknown as Member[]);
+    setCrops((cropResult.data ?? []) as Crop[]);
+    setAssignments((assignmentResult.data ?? []) as unknown as PlotCampaign[]);
+    setCropColors((colorResult.data ?? []) as CropColor[]);
+    if (settingsResult.data) setSettings(settingsResult.data as AppSettings);
     setSyncing(false);
-  }, []);
+  }, [session.user.id]);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -210,22 +229,23 @@ function AuthenticatedApp({ session }: { session: Session }) {
         <ChevronDown/>
       </div>
       <div className="sidebar-footer">
-        <button><Settings2/>Configuración</button>
+        <button className={view === "configuracion" ? "active" : ""} onClick={() => { setView("configuracion"); setSidebarOpen(false); }}><Settings2/>Configuración</button>
         <div className="user-mini"><div className="avatar">{initials(name)}</div><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
       </div>
     </aside>
     <main>
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : subtitle(view)}</p></div></div>
+        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{view === "configuracion" ? "Configuración" : nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : subtitle(view)}</p></div></div>
         <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={plots} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "campos" && <RealFieldsView fields={fields} plots={plots} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>}
         {view === "registros" && <RealRecordsView records={records}/>}
-        {view === "reportes" && <RealReportsView fields={fields} plots={plots} records={records}/>}
+        {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} records={records} crops={crops}/>}
         {view === "equipo" && <RealTeamView members={members}/>}
+        {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} onSaved={setSettings}/>}
       </>}
     </main>
   </div>;
@@ -241,6 +261,13 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
   const [drawing, setDrawing] = useState(false);
   const [points, setPoints] = useState<number[][]>([]);
   const [draft, setDraft] = useState<GeoFeature | null>(null);
+  const [satelliteOpen, setSatelliteOpen] = useState(false);
+  const [satelliteScenes, setSatelliteScenes] = useState<SatelliteScene[]>([]);
+  const [satelliteScene, setSatelliteScene] = useState<SatelliteScene | null>(null);
+  const [satelliteIndex, setSatelliteIndex] = useState("NDVI");
+  const [satelliteLoading, setSatelliteLoading] = useState(false);
+  const [satelliteError, setSatelliteError] = useState("");
+  const [satelliteOpacity, setSatelliteOpacity] = useState(.82);
   const mapPlots = useMemo<MapPlot[]>(() => plots.map(plot => {
     const feature = geometry(plot.geometry_json);
     if (!feature) return null;
@@ -284,6 +311,8 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
       map.addSource("plots", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("drawing", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("vertices", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("sentinel-image", { type: "image", url: transparentPixel(), coordinates: [[-60.3,-34.7],[-60.2,-34.7],[-60.2,-34.8],[-60.3,-34.8]] });
+      map.addLayer({ id: "sentinel-layer", type: "raster", source: "sentinel-image", paint: { "raster-opacity": .82 } });
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
       map.addLayer({ id: "plot-line", type: "line", source: "plots", paint: { "line-color": "#ffffff", "line-width": 1.7 } });
       map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "name"], "text-size": 13, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
@@ -330,6 +359,33 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     const calculated = calculateGeometry(points);
     setDraft(calculated); setDrawing(false);
   }
+  async function openSatellite() {
+    const target = selectedPlot ?? mapPlots[0];
+    if (!target || !geometry(target.geometry_json)) { setSatelliteError("Seleccioná un lote trazado para consultar Sentinel-2."); setSatelliteOpen(true); return; }
+    setSatelliteOpen(true); setSatelliteLoading(true); setSatelliteError("");
+    try {
+      const response = await fetch("/api/satellite/scenes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: geometry(target.geometry_json) }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "No se pudieron consultar las imágenes.");
+      setSatelliteScenes(payload.scenes ?? []); setSatelliteScene(payload.scenes?.[0] ?? null);
+    } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo consultar Sentinel-2."); }
+    setSatelliteLoading(false);
+  }
+  async function showSatellite(scene = satelliteScene, index = satelliteIndex) {
+    const target = selectedPlot ?? mapPlots[0]; const feature = target && geometry(target.geometry_json);
+    if (!scene || !feature || !mapRef.current) return;
+    setSatelliteLoading(true); setSatelliteError("");
+    try {
+      const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index }) });
+      if (!response.ok) { const payload = await response.json(); throw new Error(payload.error || "No se pudo procesar la imagen."); }
+      const blob = await response.blob(); const url = URL.createObjectURL(blob); const bounds = featureBounds(feature);
+      const source = mapRef.current.getSource("sentinel-image") as maplibregl.ImageSource | undefined;
+      source?.updateImage({ url, coordinates: [[bounds.west,bounds.north],[bounds.east,bounds.north],[bounds.east,bounds.south],[bounds.west,bounds.south]] });
+      mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", satelliteOpacity);
+      setSatelliteScene(scene); fitPlots(mapRef.current, mapPlots.filter(plot => plot.id === target.id));
+    } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo mostrar la imagen."); }
+    setSatelliteLoading(false);
+  }
 
   return <div className="map-workspace">
     <div ref={mapNode} className="map-canvas"/>
@@ -337,12 +393,18 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     {!drawing && !draft && <div className="map-toolbar">
       <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : ""}><Plus/><span>Dibujar lote</span></button>
       <button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)}><MapPin/><span>Ver todos</span></button>
+      <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""}><Satellite/><span>Sentinel-2</span></button>
       <button onClick={onSaved}><RotateCcw/><span>Actualizar</span></button>
     </div>}
     <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
     {selectedPlot && !drawing && !draft && <RealPlotPanel plot={selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} onClose={() => setSelectedPlot(null)}/>}
+    {satelliteOpen && <aside className="satellite-panel real-satellite"><div className="sat-top"><div><span className="eyebrow">COPERNICUS · SENTINEL-2</span><strong>Imágenes satelitales</strong></div><button onClick={() => setSatelliteOpen(false)}><X/></button></div>
+      <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
+      {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
+      {!!satelliteScenes.length && <><div className="sat-opacity"><span>Opacidad <b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history"><strong>Historial disponible</strong><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}><div className="sentinel-preview"><Satellite/></div><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></button>)}</div></div></>}
+    </aside>}
     {!fields.length && <div className="map-empty-hint">Primero necesitás crear un campo desde la aplicación móvil para poder asociar el lote.</div>}
     {fields.length > 0 && !canManageLots && <div className="map-permission-hint">Podés consultar el mapa, pero tu función no tiene el permiso “Administrar lotes”. Un dueño o administrador puede habilitarlo desde Miembros y grupo.</div>}
   </div>;
@@ -390,7 +452,25 @@ function RealPlotPanel({ plot, fieldName, onClose }: { plot: Plot; fieldName: st
 }
 
 function RealFieldsView({ fields, plots, onOpenPlot }: { fields: Field[]; plots: Plot[]; onOpenPlot: (plot: Plot) => void }) {
-  return <div className="page-content"><PageHead title="Campos y lotes" text="Información real del grupo activo."/><div className="stats-grid"><Stat label="Campos activos" value={String(fields.length)} detail={`${sum(fields.map(f => number(f.arable_area))).toLocaleString("es-AR")} ha sembrables`} icon={MapPin}/><Stat label="Lotes" value={String(plots.length)} detail={`${plots.filter(p => geometry(p.geometry_json)).length} georreferenciados`} icon={Grid2X2}/><Stat label="Superficie en lotes" value={`${sum(plots.map(p => number(p.arable_area))).toLocaleString("es-AR")} ha`} detail="Datos sincronizados" icon={Sprout}/></div><div className="content-card"><div className="card-toolbar"><div><h3>Todos los lotes</h3><p>Seleccioná uno para ubicarlo en el mapa.</p></div></div><div className="lot-table"><div className="table-head"><span>Lote</span><span>Campo</span><span>Superficie</span><span>Mapa</span><span/><span/></div>{plots.map(plot => <button className="table-row" key={plot.id} onClick={() => onOpenPlot(plot)}><span><i style={{ background: plot.priority_color || "#4fbf62" }}/><b>{plot.name}</b></span><span>{relation(plot.fields)?.name ?? fields.find(f => f.id === plot.field_id)?.name ?? "—"}</span><span>{number(plot.arable_area).toLocaleString("es-AR")} ha</span><span>{geometry(plot.geometry_json) ? "Trazado" : "Sin trazar"}</span><span/><ChevronRight/></button>)}{!plots.length && <EmptyLine text="Todavía no hay lotes en este grupo."/>}</div></div></div>;
+  const [openField, setOpenField] = useState<string | null>(fields[0]?.id ?? null);
+  return <div className="page-content"><PageHead title="Campos" text="Abrí un campo para consultar sus lotes, superficie y cultivos."/>
+    <div className="stats-grid"><Stat label="Campos activos" value={String(fields.length)} detail={`${sum(fields.map(f => number(f.arable_area))).toLocaleString("es-AR")} ha sembrables`} icon={MapPin}/><Stat label="Lotes" value={String(plots.length)} detail={`${plots.filter(p => geometry(p.geometry_json)).length} georreferenciados`} icon={Grid2X2}/><Stat label="Superficie en lotes" value={`${sum(plots.map(p => number(p.arable_area))).toLocaleString("es-AR")} ha`} detail="Datos sincronizados" icon={Sprout}/></div>
+    <div className="field-stack">{fields.map(field => {
+      const children = plots.filter(plot => plot.field_id === field.id);
+      const expanded = openField === field.id;
+      const area = sum(children.map(plot => number(plot.arable_area)));
+      return <section className={`field-card ${expanded ? "expanded" : ""}`} key={field.id}>
+        <button className="field-summary" onClick={() => setOpenField(expanded ? null : field.id)}>
+          <div className="field-icon"><MapPin/></div><div><h3>{field.name}</h3><p>{[field.locality, field.province].filter(Boolean).join(" · ") || "Sin ubicación informada"}</p></div>
+          <div className="field-metric"><strong>{area.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha</strong><small>{children.length} lote{children.length === 1 ? "" : "s"}</small></div><ChevronDown/>
+        </button>
+        {expanded && <div className="field-plots">{children.map(plot => <button className="field-plot-row" key={plot.id} onClick={() => onOpenPlot(plot)}>
+          <i style={{ background: plot.cropColor || "#77847e" }}/><div><strong>{plot.name}</strong><small>{plot.cropName || "Sin cultivo asignado"}</small></div>
+          <span>{number(plot.arable_area).toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha</span><em>{geometry(plot.geometry_json) ? "En mapa" : "Sin trazar"}</em><ChevronRight/>
+        </button>)}{!children.length && <EmptyLine text="Este campo todavía no tiene lotes."/ >}</div>}
+      </section>;
+    })}{!fields.length && <div className="content-card"><EmptyLine text="Todavía no hay campos en este grupo."/></div>}</div>
+  </div>;
 }
 
 function RealRecordsView({ records }: { records: RecordRow[] }) {
@@ -399,10 +479,47 @@ function RealRecordsView({ records }: { records: RecordRow[] }) {
   return <div className="page-content"><PageHead title="Registros" text="Actividad real sincronizada con Android."/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por campo, lote o tipo…"/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <article className="record-card" key={row.id}><div className="record-type-icon"><Leaf/></div><div className="record-main"><span>{recordType(row.record_type)}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><p>{number(row.worked_area).toLocaleString("es-AR")} ha</p></div><div className="record-meta"><strong>{formatDate(row.record_date)}</strong><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small></div><button className="icon-button"><ChevronRight/></button></article>)}{!visible.length && <EmptyLine text="No hay registros para mostrar."/>}</div></div>;
 }
 
-function RealReportsView({ fields, plots, records }: { fields: Field[]; plots: Plot[]; records: RecordRow[] }) {
-  const total = sum(plots.map(p => number(p.arable_area)));
-  const georeferenced = plots.filter(p => geometry(p.geometry_json)).length;
-  return <div className="page-content"><PageHead title="Reportes" text="Resumen calculado con la información real disponible."/><div className="kpi-grid"><Kpi label="Superficie en lotes" value={`${total.toLocaleString("es-AR")} ha`}/><Kpi label="Campos activos" value={String(fields.length)}/><Kpi label="Lotes georreferenciados" value={`${georeferenced} / ${plots.length}`}/><Kpi label="Registros cargados" value={String(records.length)}/></div><div className="content-card report-real"><h3>Distribución por campo</h3>{fields.map(field => { const area = sum(plots.filter(p => p.field_id === field.id).map(p => number(p.arable_area))); return <div className="report-field" key={field.id}><span>{field.name}</span><i><b style={{ width: `${total ? Math.max(3, area / total * 100) : 0}%` }}/></i><strong>{area.toLocaleString("es-AR")} ha</strong></div>; })}</div></div>;
+function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; plots: Plot[]; records: RecordRow[]; crops: Crop[] }) {
+  const [fieldId, setFieldId] = useState("");
+  const [plotId, setPlotId] = useState("");
+  const [crop, setCrop] = useState("");
+  const [type, setType] = useState("");
+  const filtered = records.filter(row => (!fieldId || row.field_id === fieldId) && (!plotId || row.plot_id === plotId) && (!type || row.record_type === type) && (!crop || recordCrop(row).toLowerCase() === crop.toLowerCase()));
+  const filteredPlots = plots.filter(plot => (!fieldId || plot.field_id === fieldId) && (!plotId || plot.id === plotId) && (!crop || plot.cropName?.toLowerCase() === crop.toLowerCase()));
+  const area = sum(filteredPlots.map(plot => number(plot.arable_area)));
+  const worked = sum(filtered.map(row => number(row.worked_area)));
+  const byType = Object.entries(filtered.reduce<Record<string, number>>((acc, row) => { acc[recordType(row.record_type)] = (acc[recordType(row.record_type)] ?? 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1]);
+  const maxType = Math.max(1, ...byType.map(([, value]) => value));
+  return <div className="page-content"><PageHead title="Reportes" text="El mismo análisis operativo de la app, con filtros combinables."/>
+    <div className="report-filter premium-filter"><select value={fieldId} onChange={e => { setFieldId(e.target.value); setPlotId(""); }}><option value="">Todos los campos</option>{fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select><select value={plotId} onChange={e => setPlotId(e.target.value)}><option value="">Todos los lotes</option>{plots.filter(plot => !fieldId || plot.field_id === fieldId).map(plot => <option key={plot.id} value={plot.id}>{plot.name}</option>)}</select><select value={crop} onChange={e => setCrop(e.target.value)}><option value="">Todos los cultivos</option>{crops.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}</select><select value={type} onChange={e => setType(e.target.value)}><option value="">Todos los registros</option>{Array.from(new Set(records.map(row => row.record_type))).map(item => <option key={item} value={item}>{recordType(item)}</option>)}</select><button onClick={() => { setFieldId(""); setPlotId(""); setCrop(""); setType(""); }}><RotateCcw/>Limpiar</button></div>
+    <div className="kpi-grid"><Kpi label="Superficie analizada" value={`${area.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Superficie trabajada" value={`${worked.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Lotes incluidos" value={String(filteredPlots.length)}/><Kpi label="Registros incluidos" value={String(filtered.length)}/></div>
+    <div className="report-grid app-reports"><div className="chart-card"><div className="chart-head"><div><h3>Actividad por tipo</h3><p>Distribución de los registros filtrados</p></div><BarChart3/></div><div className="bars">{byType.map(([label, value]) => <div key={label}><span>{label}</span><i><b style={{ width: `${value / maxType * 100}%` }}/></i><strong>{value}</strong></div>)}{!byType.length && <EmptyLine text="No hay actividad para estos filtros."/ >}</div></div>
+    <div className="chart-card"><div className="chart-head"><div><h3>Resumen por campo</h3><p>Superficie de los lotes visibles</p></div></div>{fields.filter(field => !fieldId || field.id === fieldId).map(field => { const value = sum(filteredPlots.filter(plot => plot.field_id === field.id).map(plot => number(plot.arable_area))); return <div className="report-field" key={field.id}><span>{field.name}</span><i><b style={{ width: `${area ? value / area * 100 : 0}%` }}/></i><strong>{value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} ha</strong></div>; })}</div></div>
+    <div className="content-card report-summary"><h3>Resumen de prioridades</h3>{fields.filter(field => !fieldId || field.id === fieldId).map(field => <section key={field.id}><h4>{field.name}</h4>{filteredPlots.filter(plot => plot.field_id === field.id).map(plot => <div key={plot.id}><i style={{ background: plot.priority_color || "#77847e" }}/><span>{plot.name}</span><small>{plot.cropName || "Sin cultivo"}</small><strong>{number(plot.arable_area).toLocaleString("es-AR")} ha</strong></div>)}</section>)}</div>
+  </div>;
+}
+
+function RealSettingsView({ groupId, userId, settings, onSaved }: { groupId: string; userId: string; settings: AppSettings; onSaved: (value: AppSettings) => void }) {
+  const [draft, setDraft] = useState(settings);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => setDraft(settings), [settings]);
+  async function save() {
+    setSaving(true); setMessage("");
+    const { error } = await supabase.from("app_settings").upsert({ group_id: groupId, user_id: userId, ...draft }, { onConflict: "group_id,user_id" });
+    setSaving(false);
+    if (error) setMessage(error.message); else { onSaved(draft); setMessage("Configuración guardada."); }
+  }
+  return <div className="page-content settings-page"><PageHead title="Configuración" text="Preferencias personales para este grupo."/><div className="settings-grid">
+    <section className="content-card"><div className="settings-title"><Settings2/><div><h3>Apariencia y formato</h3><p>La configuración se sincroniza con tu cuenta.</p></div></div>
+      <label>Tema<select value={draft.appearance} onChange={e => setDraft({ ...draft, appearance: e.target.value })}><option value="system">Usar tema del dispositivo</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
+      <label>Unidad de superficie<select value={draft.area_unit} onChange={e => setDraft({ ...draft, area_unit: e.target.value })}><option value="ha">Hectáreas (ha)</option><option value="m2">Metros cuadrados (m²)</option></select></label>
+      <label>Formato de fecha<select value={draft.date_format} onChange={e => setDraft({ ...draft, date_format: e.target.value })}><option value="dd-MM-yyyy">Día-mes-año</option><option value="dd/MM/yyyy">Día/mes/año</option><option value="yyyy-MM-dd">Año-mes-día</option></select></label>
+      <label className="settings-check"><input type="checkbox" checked={draft.notifications_enabled} onChange={e => setDraft({ ...draft, notifications_enabled: e.target.checked })}/><span><strong>Notificaciones</strong><small>Recibir avisos operativos del grupo.</small></span></label>
+      {message && <p className={message.includes("guardada") ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
+    </section>
+    <section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Los datos institucionales, miembros, roles y permisos se administran desde la sección Equipo. Las preferencias de esta pantalla solo afectan a tu cuenta.</p></section>
+  </div></div>;
 }
 
 function RealTeamView({ members }: { members: Member[] }) {
@@ -418,14 +535,38 @@ function EmptyLine({ text }: { text: string }) { return <div className="empty-li
 function PageHead({ title, text }: { title: string; text: string }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div></div>; }
 function Stat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof MapPin }) { return <div className="stat-card"><div><Icon/></div><section><small>{label}</small><strong>{value}</strong><p>{detail}</p></section></div>; }
 function Kpi({ label, value }: { label: string; value: string }) { return <div className="kpi"><small>{label}</small><strong>{value}</strong><span className="positive">Datos reales</span></div>; }
-function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", reportes: "Indicadores del grupo activo", equipo: "Miembros y roles", mapa: "" } as Record<View, string>)[view]; }
+function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", reportes: "Indicadores del grupo activo", equipo: "Miembros y roles", configuracion: "Preferencias personales", mapa: "" } as Record<View, string>)[view]; }
 function cap(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "G"; }
 function roleName(role?: string) { return ({ owner: "Propietario", admin: "Administrador", agronomist: "Ingeniero / Agrónomo", operator: "Operador", monitor: "Monitoreador", producer: "Productor", member: "Miembro" } as Record<string, string>)[role ?? ""] ?? cap(role ?? "Miembro"); }
 function recordType(type: string) { return ({ sowing: "Siembra", spraying: "Pulverización", fertilization: "Fertilización", harvest: "Cosecha", work: "Roturación", monitoring: "Monitoreo", expense: "Gasto", other: "Otro" } as Record<string, string>)[type] ?? cap(type); }
 function formatDate(value: string) { const date = new Date(`${value}T12:00:00`); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", year: "numeric" }).format(date); }
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
-function plotColor(plot: Plot, layer: string) { if (layer === "prioridad") return plot.priority_color || "#718078"; return "#43a85d"; }
+function plotColor(plot: Plot, layer: string) { if (layer === "prioridad") return plot.priority_color || "#718078"; return plot.cropColor || "#77847e"; }
+function recordCrop(row: RecordRow) {
+  const details = row.details ?? {};
+  return String(details.crop ?? details.cultivo ?? details.crop_name ?? "");
+}
+function defaultCropColor(name: string) {
+  const palette = ["#8E24AA", "#7CB342", "#F4511E", "#FDD835", "#FB8C00", "#1E88E5", "#31E048", "#43A047", "#00897B", "#D32F2F", "#F9A825", "#6D4C41", "#3949AB", "#00ACC1"];
+  let hash = 0; for (const char of name.toLowerCase()) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return palette[Math.abs(hash) % palette.length];
+}
+function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[]) {
+  return plots.map(plot => {
+    const newest = records.filter(row => row.plot_id === plot.id && recordCrop(row)).sort((a, b) => String(b.record_date).localeCompare(String(a.record_date)))[0];
+    const activeAssignment = assignments.find(item => item.plot_id === plot.id && relation(item.campaigns)?.status === "active") ?? assignments.find(item => item.plot_id === plot.id);
+    const name = newest ? recordCrop(newest) : relation(activeAssignment?.crops)?.name ?? null;
+    const cropId = activeAssignment?.crop_id;
+    return { ...plot, cropName: name, cropColor: (cropId && colors.find(item => item.crop_id === cropId)?.color) || (name ? defaultCropColor(name) : "#77847e") };
+  });
+}
+function transparentPixel() { return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL5WQAAAABJRU5ErkJggg=="; }
+function featureBounds(feature: GeoFeature) {
+  const points = feature.geometry.coordinates[0] ?? [];
+  return { west: Math.min(...points.map(p => p[0])), east: Math.max(...points.map(p => p[0])), south: Math.min(...points.map(p => p[1])), north: Math.max(...points.map(p => p[1])) };
+}
+function satelliteIndexName(value: string) { return ({ RGB: "RGB natural", NDVI: "NDVI", NDVI_CONTRASTED: "NDVI contrastado", FALSE_COLOR: "Falso color", NDRE: "NDRE" } as Record<string, string>)[value] ?? value; }
 function fitPlots(map: MapLibreMap, plots: MapPlot[]) {
   const coordinates = plots.flatMap(plot => plot.feature.geometry.coordinates[0] ?? []);
   if (!coordinates.length) return;
