@@ -362,7 +362,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       type: "FeatureCollection",
       features: monitoringRecords.map(row => {
         const data = recordData(row);
-        return { type: "Feature", properties: { id: row.id }, geometry: { type: "Point", coordinates: [number(data.gps_longitude as string | number), number(data.gps_latitude as string | number)] } };
+        const priority = Math.max(1, Math.min(5, number(data.monitoring_priority as string | number) || 3));
+        return { type: "Feature", properties: { id: row.id, color: monitoringPriorityColor(priority) }, geometry: { type: "Point", coordinates: [number(data.gps_longitude as string | number), number(data.gps_latitude as string | number)] } };
       })
     });
     if (map.getLayer("plot-fill")) map.setPaintProperty("plot-fill", "fill-opacity", layer === "sin-relleno" ? 0 : .48);
@@ -388,7 +389,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
       map.addLayer({ id: "plot-line", type: "line", source: "plots", paint: { "line-color": "#ffffff", "line-width": 1.7 } });
       map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "name"], "text-size": 13, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
-      map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": "#ff2f72", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
+      map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
       map.addLayer({ id: "draw-fill", type: "fill", source: "drawing", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#63dc42", "fill-opacity": .28 } });
       map.addLayer({ id: "draw-line", type: "line", source: "drawing", paint: { "line-color": "#a7ff79", "line-width": 3 } });
       map.addLayer({ id: "draw-points", type: "circle", source: "vertices", paint: { "circle-radius": 6, "circle-color": "#f8fff4", "circle-stroke-color": "#1e7b45", "circle-stroke-width": 3 } });
@@ -597,8 +598,9 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
   const [plotId, setPlotId] = useState("");
   const [crop, setCrop] = useState("");
   const [type, setType] = useState("");
+  const [priority, setPriority] = useState("");
   const filtered = records.filter(row => (!fieldId || row.field_id === fieldId) && (!plotId || row.plot_id === plotId) && (!type || row.record_type === type) && (!crop || recordCrop(row).toLowerCase() === crop.toLowerCase()));
-  const filteredPlots = plots.filter(plot => (!fieldId || plot.field_id === fieldId) && (!plotId || plot.id === plotId) && (!crop || plot.cropName?.toLowerCase() === crop.toLowerCase()));
+  const filteredPlots = plots.filter(plot => (!fieldId || plot.field_id === fieldId) && (!plotId || plot.id === plotId) && (!crop || plot.cropName?.toLowerCase() === crop.toLowerCase()) && (!priority || normalizePriorityColor(plot.priority_color) === priority));
   const area = sum(filteredPlots.map(plot => number(plot.arable_area)));
   const worked = sum(filtered.map(row => number(row.worked_area)));
   const byType = Object.entries(filtered.reduce<Record<string, number>>((acc, row) => { acc[recordType(row.record_type)] = (acc[recordType(row.record_type)] ?? 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1]);
@@ -608,7 +610,7 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
     <div className="kpi-grid"><Kpi label="Superficie analizada" value={`${area.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Superficie trabajada" value={`${worked.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Lotes incluidos" value={String(filteredPlots.length)}/><Kpi label="Registros incluidos" value={String(filtered.length)}/></div>
     <div className="report-grid app-reports"><div className="chart-card"><div className="chart-head"><div><h3>Actividad por tipo</h3><p>Distribución de los registros filtrados</p></div><BarChart3/></div><div className="bars">{byType.map(([label, value]) => <div key={label}><span>{label}</span><i><b style={{ width: `${value / maxType * 100}%` }}/></i><strong>{value}</strong></div>)}{!byType.length && <EmptyLine text="No hay actividad para estos filtros."/ >}</div></div>
     <div className="chart-card"><div className="chart-head"><div><h3>Resumen por campo</h3><p>Superficie de los lotes visibles</p></div></div>{fields.filter(field => !fieldId || field.id === fieldId).map(field => { const value = sum(filteredPlots.filter(plot => plot.field_id === field.id).map(plot => number(plot.arable_area))); return <div className="report-field" key={field.id}><span>{field.name}</span><i><b style={{ width: `${area ? value / area * 100 : 0}%` }}/></i><strong>{value.toLocaleString("es-AR", { maximumFractionDigits: 1 })} ha</strong></div>; })}</div></div>
-    <div className="content-card report-summary"><h3>Resumen de prioridades</h3>{fields.filter(field => !fieldId || field.id === fieldId).map(field => <section key={field.id}><h4>{field.name}</h4>{filteredPlots.filter(plot => plot.field_id === field.id).map(plot => <div key={plot.id}><i style={{ background: plot.priority_color || "#77847e" }}/><span>{plot.name}</span><small>{plot.cropName || "Sin cultivo"}</small><strong>{number(plot.arable_area).toLocaleString("es-AR")} ha</strong></div>)}</section>)}</div>
+    <div className="content-card report-summary"><div className="priority-summary-head"><div><h3>Resumen de prioridades</h3><p>Filtrá los lotes por la prioridad asignada en el grupo.</p></div><div className="priority-filter"><button className={!priority ? "active" : ""} onClick={() => setPriority("")}>Todas</button><button className={priority === "#D32F2F" ? "active" : ""} onClick={() => setPriority("#D32F2F")}><i style={{background:"#D32F2F"}}/>Alta</button><button className={priority === "#FBC02D" ? "active" : ""} onClick={() => setPriority("#FBC02D")}><i style={{background:"#FBC02D"}}/>Media</button><button className={priority === "#388E3C" ? "active" : ""} onClick={() => setPriority("#388E3C")}><i style={{background:"#388E3C"}}/>Baja</button></div></div>{fields.filter(field => !fieldId || field.id === fieldId).map(field => <section key={field.id}><h4>{field.name}</h4>{filteredPlots.filter(plot => plot.field_id === field.id).map(plot => <div key={plot.id}><i style={{ background: plot.priority_color || "#77847e" }}/><span>{plot.name}</span><small>{plot.cropName || "Sin cultivo"}</small><strong>{number(plot.arable_area).toLocaleString("es-AR")} ha</strong></div>)}</section>)}</div>
   </div>;
 }
 
@@ -663,9 +665,9 @@ function RealTeamView({ groupId, members, canManage, onSaved }: { groupId:string
 }
 
 function Brand() {
-  return <div className="brand"><div className="brand-mark"><span>G</span><Leaf size={16}/></div><div><strong>Growr<span>360</span></strong><small>Gestión agrícola</small></div></div>;
+  return <div className="brand"><img className="brand-logo" src="/growr360-logo.png" alt="Growr360"/><div><strong>Growr<span>360</span></strong><small>Gestión agrícola</small></div></div>;
 }
-function LoadingScreen({ text }: { text: string }) { return <div className="loading-screen"><div className="brand-mark"><span>G</span><Leaf/></div><LoaderCircle className="spin"/><strong>{text}</strong></div>; }
+function LoadingScreen({ text }: { text: string }) { return <div className="loading-screen"><img className="splash-logo" src="/growr360-logo.png" alt="Growr360"/><LoaderCircle className="spin"/><strong>{text}</strong></div>; }
 function EmptyWorkspace() { return <div className="empty-workspace"><Users/><h2>Tu cuenta todavía no tiene un grupo activo</h2><p>Creá un grupo o enviá una solicitud desde la aplicación móvil. Cuando te acepten, aparecerá acá automáticamente.</p></div>; }
 function EmptyLine({ text }: { text: string }) { return <div className="empty-line">{text}</div>; }
 function PageHead({ title, text }: { title: string; text: string }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div></div>; }
@@ -696,6 +698,8 @@ function defaultCropColor(name: string) {
   return palette[Math.abs(hash) % palette.length];
 }
 function normalizeText(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es"); }
+function monitoringPriorityColor(level: number) { return (["#2E7D32", "#7CB342", "#FBC02D", "#F57C00", "#D32F2F"])[Math.max(1, Math.min(5, level)) - 1]; }
+function normalizePriorityColor(value?: string | null) { const color = String(value ?? "").toUpperCase(); return ({ RED: "#D32F2F", YELLOW: "#FBC02D", GREEN: "#388E3C" } as Record<string,string>)[color] ?? color; }
 function normalizeCropName(value: string) { return normalizeText(value); }
 function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[], crops: Crop[], preferredCampaignId?: string) {
   return plots.map(plot => {
