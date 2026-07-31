@@ -268,11 +268,11 @@ function AuthenticatedApp({ session }: { session: Session }) {
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} records={records} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors, crops)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
         {view === "registros" && <RealRecordsView records={records}/>}
         {view === "gestion" && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} crops={crops} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} onMap={() => setView("mapa")} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} records={records} crops={crops}/>}
+        {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops}/>}
         {view === "equipo" && <RealTeamView groupId={groupId} members={members} canManage={hasPermission("manage_members")} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} onSaved={setSettings}/>}
       </>}
@@ -646,12 +646,13 @@ function defaultCropColor(name: string) {
   let hash = 0; for (const char of name.toLowerCase()) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
   return palette[Math.abs(hash) % palette.length];
 }
-function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[]) {
+function normalizeCropName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es"); }
+function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[], crops: Crop[]) {
   return plots.map(plot => {
     const newest = records.filter(row => row.plot_id === plot.id && recordCrop(row)).sort((a, b) => String(b.record_date).localeCompare(String(a.record_date)))[0];
     const activeAssignment = assignments.find(item => item.plot_id === plot.id && relation(item.campaigns)?.status === "active") ?? assignments.find(item => item.plot_id === plot.id);
     const name = newest ? recordCrop(newest) : relation(activeAssignment?.crops)?.name ?? null;
-    const cropId = activeAssignment?.crop_id;
+    const cropId = crops.find(crop => name && normalizeCropName(crop.name) === normalizeCropName(name))?.id ?? activeAssignment?.crop_id;
     return { ...plot, cropName: name, cropColor: (cropId && colors.find(item => item.crop_id === cropId)?.color) || (name ? defaultCropColor(name) : "#77847e") };
   });
 }
