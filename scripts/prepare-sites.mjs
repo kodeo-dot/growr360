@@ -46,7 +46,7 @@ await writeFile(
     }
     if (url.pathname === "/api/satellite/image" && request.method === "POST") {
       try {
-        const { geometry, date, index } = await request.json();
+        const { geometry, date, index, thumbnail } = await request.json();
         const token = await sentinelToken(env);
         const points = geometry.geometry.coordinates[0];
         const west = Math.min(...points.map(p => p[0])), east = Math.max(...points.map(p => p[0]));
@@ -54,7 +54,7 @@ await writeFile(
         const evalscript = satelliteEvalscript(index);
         const body = {
           input: { bounds: { geometry: geometry.geometry, properties: { crs: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" } }, data: [{ type: "sentinel-2-l2a", dataFilter: { timeRange: { from: date + "T00:00:00Z", to: date + "T23:59:59Z" }, mosaickingOrder: "leastCC" } }] },
-          output: { width: 768, height: Math.max(320, Math.round(768 * Math.abs(north-south) / Math.max(.0001, Math.abs(east-west)))), responses: [{ identifier: "default", format: { type: "image/png" } }] },
+          output: { width: thumbnail ? 220 : 768, height: thumbnail ? 140 : Math.max(320, Math.round(768 * Math.abs(north-south) / Math.max(.0001, Math.abs(east-west)))), responses: [{ identifier: "default", format: { type: "image/png" } }] },
           evalscript
         };
         const response = await fetch("https://services.sentinel-hub.com/api/v1/process", { method: "POST", headers: { "content-type": "application/json", accept: "image/png", authorization: "Bearer " + token }, body: JSON.stringify(body) });

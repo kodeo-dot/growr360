@@ -249,7 +249,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} records={records} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>}
         {view === "registros" && <RealRecordsView records={records}/>}
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors)} records={records} crops={crops}/>}
@@ -260,8 +260,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
   </div>;
 }
 
-function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onSaved }: {
-  fields: Field[]; plots: Plot[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
+function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onSaved }: {
+  fields: Field[]; plots: Plot[]; records: RecordRow[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
   groupId: string; userId: string; canManageLots: boolean; onSaved: () => void;
 }) {
   const mapNode = useRef<HTMLDivElement>(null);
@@ -277,6 +277,9 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [satelliteError, setSatelliteError] = useState("");
   const [satelliteOpacity, setSatelliteOpacity] = useState(.82);
+  const [satellitePlotId, setSatellitePlotId] = useState("");
+  const [satellitePreviews, setSatellitePreviews] = useState<Record<string, string>>({});
+  const [detailRecord, setDetailRecord] = useState<RecordRow | null>(null);
   const mapPlots = useMemo<MapPlot[]>(() => plots.map(plot => {
     const feature = geometry(plot.geometry_json);
     if (!feature) return null;
@@ -368,20 +371,33 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     const calculated = calculateGeometry(points);
     setDraft(calculated); setDrawing(false);
   }
-  async function openSatellite() {
-    const target = selectedPlot ?? mapPlots[0];
+  async function loadSatelliteScenes(plotId: string) {
+    const target = mapPlots.find(plot => plot.id === plotId);
     if (!target || !geometry(target.geometry_json)) { setSatelliteError("Seleccioná un lote trazado para consultar Sentinel-2."); setSatelliteOpen(true); return; }
-    setSatelliteOpen(true); setSatelliteLoading(true); setSatelliteError("");
+    setSatellitePlotId(target.id); setSatelliteLoading(true); setSatelliteError(""); setSatelliteScenes([]); setSatellitePreviews({});
     try {
       const response = await fetch("/api/satellite/scenes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: geometry(target.geometry_json) }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "No se pudieron consultar las imágenes.");
       setSatelliteScenes(payload.scenes ?? []); setSatelliteScene(payload.scenes?.[0] ?? null);
+      void loadSatellitePreviews(target, (payload.scenes ?? []).slice(0, 10), satelliteIndex);
     } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo consultar Sentinel-2."); }
     setSatelliteLoading(false);
   }
+  async function openSatellite() {
+    const target = selectedPlot ?? mapPlots.find(plot => plot.id === satellitePlotId) ?? mapPlots[0];
+    setSatelliteOpen(true);
+    if (target) await loadSatelliteScenes(target.id); else setSatelliteError("No hay lotes trazados disponibles.");
+  }
+  async function loadSatellitePreviews(target: MapPlot, scenes: SatelliteScene[], index: string) {
+    const feature = geometry(target.geometry_json); if (!feature) return;
+    const entries = await Promise.all(scenes.map(async scene => {
+      try { const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index, thumbnail: true }) }); if (!response.ok) return [scene.id, ""] as const; return [scene.id, URL.createObjectURL(await response.blob())] as const; } catch { return [scene.id, ""] as const; }
+    }));
+    setSatellitePreviews(Object.fromEntries(entries));
+  }
   async function showSatellite(scene = satelliteScene, index = satelliteIndex) {
-    const target = selectedPlot ?? mapPlots[0]; const feature = target && geometry(target.geometry_json);
+    const target = mapPlots.find(plot => plot.id === satellitePlotId); const feature = target && geometry(target.geometry_json);
     if (!scene || !feature || !mapRef.current) return;
     setSatelliteLoading(true); setSatelliteError("");
     try {
@@ -408,12 +424,14 @@ function RealMapView({ fields, plots, selectedPlot, setSelectedPlot, groupId, us
     <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
-    {selectedPlot && !drawing && !draft && <RealPlotPanel plot={selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} onClose={() => setSelectedPlot(null)}/>}
+    {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
     {satelliteOpen && <aside className="satellite-panel real-satellite"><div className="sat-top"><div><span className="eyebrow">COPERNICUS · SENTINEL-2</span><strong>Imágenes satelitales</strong></div><button onClick={() => setSatelliteOpen(false)}><X/></button></div>
-      <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
+      <label className="sat-plot-picker">Lote<select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
+      <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, 10), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
       {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
-      {!!satelliteScenes.length && <><div className="sat-opacity"><span>Opacidad <b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history"><strong>Historial disponible</strong><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}><div className="sentinel-preview"><Satellite/></div><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></button>)}</div></div></>}
+      {!!satelliteScenes.length && <><div className="sat-opacity"><span>Opacidad <b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history"><strong>Historial · {satelliteIndexName(satelliteIndex)}</strong><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></button>)}</div></div></>}
     </aside>}
+    {detailRecord && <RecordDetail record={detailRecord} onClose={() => setDetailRecord(null)}/>}
     {!fields.length && <div className="map-empty-hint">Primero necesitás crear un campo desde la aplicación móvil para poder asociar el lote.</div>}
     {fields.length > 0 && !canManageLots && <div className="map-permission-hint">Podés consultar el mapa, pero tu función no tiene el permiso “Administrar lotes”. Un dueño o administrador puede habilitarlo desde Miembros y grupo.</div>}
   </div>;
@@ -456,8 +474,25 @@ function PlotForm({ feature, fields, groupId, userId, onCancel, onSaved }: {
   </form>;
 }
 
-function RealPlotPanel({ plot, fieldName, onClose }: { plot: Plot; fieldName: string; onClose: () => void }) {
-  return <aside className="lot-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">LOTE REAL</span><h2>{plot.name}</h2><p><MapPin/> {fieldName}</p></div><button className="icon-button" onClick={onClose}><X/></button></div><div className="lot-metrics"><div><small>Superficie</small><strong>{number(plot.arable_area).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha</strong></div><div><small>Edición compartida</small><strong>{plot.allow_member_edits ? "Permitida" : "Restringida"}</strong></div></div><div className="real-data-badge"><Check/>Sincronizado con la app móvil</div></aside>;
+function RealPlotPanel({ plot, fieldName, records, onRecord, onSatellite, onClose }: { plot: Plot; fieldName: string; records: RecordRow[]; onRecord: (record: RecordRow) => void; onSatellite: () => void; onClose: () => void }) {
+  const ordered = [...records].sort((a,b) => String(b.record_date).localeCompare(String(a.record_date)));
+  const monitorings = ordered.filter(row => row.record_type === "monitoring").slice(0, 5);
+  const activities = ordered.filter(row => row.record_type !== "monitoring").slice(0, 5);
+  return <aside className="lot-panel operational-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">LOTE</span><h2>{plot.name}</h2><p><MapPin/> {fieldName}</p></div><button className="icon-button" onClick={onClose}><X/></button></div>
+    <div className="lot-metrics"><div><small>Superficie</small><strong>{number(plot.arable_area).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha</strong></div><div><small>Cultivo actual</small><strong><i style={{ background: plot.cropColor || "#77847e" }}/>{plot.cropName || "Sin cultivo"}</strong></div></div>
+    <div className="quick-actions plot-actions"><button onClick={onSatellite}><Satellite/>Imágenes satelitales</button><button><Plus/>Nuevo registro</button><button><Activity/>Monitorear</button></div>
+    <PlotActivitySection title="Últimos registros" icon={FileText} rows={activities} onOpen={onRecord}/>
+    <PlotActivitySection title="Últimos monitoreos" icon={Activity} rows={monitorings} onOpen={onRecord}/>
+  </aside>;
+}
+
+function PlotActivitySection({ title, icon: Icon, rows, onOpen }: { title: string; icon: typeof Activity; rows: RecordRow[]; onOpen: (record: RecordRow) => void }) {
+  return <section><div className="section-title"><div><Icon/>{title}</div><span>{rows.length}</span></div>{rows.map(row => <button className="activity-row activity-button" key={row.id} onClick={() => onOpen(row)}><div className="activity-icon"><Leaf/></div><div><strong>{recordType(row.record_type)}{recordCrop(row) ? ` · ${recordCrop(row)}` : ""}</strong><small>{formatDate(row.record_date)} · {number(row.worked_area).toLocaleString("es-AR")} ha</small></div><ChevronRight/></button>)}{!rows.length && <p className="panel-empty">No hay información cargada.</p>}</section>;
+}
+
+function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => void }) {
+  const details = recordData(record);
+  return <div className="record-detail-backdrop"><article className="record-detail-sheet"><header><button className="icon-button" onClick={onClose}><ChevronLeft/></button><div><span className="eyebrow">{record.record_type === "monitoring" ? "MONITOREO" : "REGISTRO"}</span><h2>{recordType(record.record_type)}{recordCrop(record) ? ` · ${recordCrop(record)}` : ""}</h2><p>{relation(record.fields)?.name || "Campo"} · {relation(record.plots)?.name || "Sin lote"}</p></div><button className="icon-button" onClick={onClose}><X/></button></header><div className="detail-hero"><CalendarDays/><div><small>Fecha</small><strong>{formatDate(record.record_date)}</strong></div><div><small>Campaña</small><strong>{relation(record.campaigns)?.name || "Sin campaña"}</strong></div><div><small>Superficie</small><strong>{number(record.worked_area).toLocaleString("es-AR")} ha</strong></div></div><section><h3>Información registrada</h3><div className="detail-grid">{Object.entries(details).filter(([,value]) => value !== null && value !== "").map(([key,value]) => <div key={key}><small>{detailLabel(key)}</small><strong>{String(value)}</strong></div>)}{!Object.keys(details).length && <EmptyLine text="Este registro no tiene datos adicionales."/>}</div></section></article></div>;
 }
 
 function RealFieldsView({ fields, plots, onOpenPlot }: { fields: Field[]; plots: Plot[]; onOpenPlot: (plot: Plot) => void }) {
@@ -553,11 +588,15 @@ function formatDate(value: string) { const date = new Date(`${value}T12:00:00`);
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
 function plotColor(plot: Plot, layer: string) { if (layer === "prioridad") return plot.priority_color || "#718078"; return plot.cropColor || "#77847e"; }
 function recordCrop(row: RecordRow) {
-  const relationNames = ["sowing_records", "spraying_records", "fertilization_records", "harvest_records", "work_records", "monitoring_records", "expense_records", "other_records"] as const;
-  const embedded = relationNames.map(name => relation(row[name])?.data).find(Boolean) ?? {};
-  const details = { ...embedded, ...(row.details ?? {}) } as Record<string, unknown>;
+  const details = recordData(row);
   return String(details.crop ?? details.cultivo ?? details.crop_name ?? "");
 }
+function recordData(row: RecordRow) {
+  const relationNames = ["sowing_records", "spraying_records", "fertilization_records", "harvest_records", "work_records", "monitoring_records", "expense_records", "other_records"] as const;
+  const embedded = relationNames.map(name => relation(row[name])?.data).find(Boolean) ?? {};
+  return { ...embedded, ...(row.details ?? {}) } as Record<string, unknown>;
+}
+function detailLabel(key: string) { return key.replace(/^gps_/, "GPS ").replaceAll("_", " ").replace(/\b\w/g, value => value.toUpperCase()); }
 function defaultCropColor(name: string) {
   const palette = ["#8E24AA", "#7CB342", "#F4511E", "#FDD835", "#FB8C00", "#1E88E5", "#31E048", "#43A047", "#00897B", "#D32F2F", "#F9A825", "#6D4C41", "#3949AB", "#00ACC1"];
   let hash = 0; for (const char of name.toLowerCase()) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
