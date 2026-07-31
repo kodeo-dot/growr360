@@ -26,7 +26,7 @@ await writeFile(
         const token = await sentinelToken(env);
         const to = new Date();
         const from = new Date(to); from.setMonth(from.getMonth() - 6);
-        const response = await fetch("https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search", {
+        const response = await fetch("https://services.sentinel-hub.com/api/v1/catalog/1.0.0/search", {
           method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token },
           body: JSON.stringify({ collections: ["sentinel-2-l2a"], intersects: geometry.geometry, datetime: from.toISOString() + "/" + to.toISOString(), limit: 100 })
         });
@@ -57,7 +57,7 @@ await writeFile(
           output: { width: 768, height: Math.max(320, Math.round(768 * Math.abs(north-south) / Math.max(.0001, Math.abs(east-west)))), responses: [{ identifier: "default", format: { type: "image/png" } }] },
           evalscript
         };
-        const response = await fetch("https://sh.dataspace.copernicus.eu/api/v1/process", { method: "POST", headers: { "content-type": "application/json", accept: "image/png", authorization: "Bearer " + token }, body: JSON.stringify(body) });
+        const response = await fetch("https://services.sentinel-hub.com/api/v1/process", { method: "POST", headers: { "content-type": "application/json", accept: "image/png", authorization: "Bearer " + token }, body: JSON.stringify(body) });
         if (!response.ok) throw new Error("No se pudo procesar esta fecha de Sentinel-2.");
         return new Response(response.body, { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       } catch (error) { return Response.json({ error: error.message || "No se pudo generar la imagen." }, { status: 500 }); }
@@ -78,7 +78,7 @@ await writeFile(
 async function sentinelToken(env) {
   if (!env.SENTINEL_HUB_CLIENT_ID || !env.SENTINEL_HUB_CLIENT_SECRET) throw new Error("El servicio Sentinel-2 todavía no está configurado en la web.");
   const body = new URLSearchParams({ grant_type: "client_credentials", client_id: env.SENTINEL_HUB_CLIENT_ID, client_secret: env.SENTINEL_HUB_CLIENT_SECRET });
-  const response = await fetch("https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body });
+  const response = await fetch("https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" }, body });
   if (!response.ok) throw new Error("No se pudo autenticar con Copernicus.");
   return (await response.json()).access_token;
 }

@@ -33,6 +33,14 @@ type RecordRow = {
   field_id?: string | null; plot_id?: string | null; fields?: { name: string } | null;
   plots?: { name: string } | null; campaigns?: { id?: string; name: string } | null;
   campaign_id?: string | null; details?: Record<string, string | number | boolean | null> | null;
+  sowing_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  spraying_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  fertilization_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  harvest_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  work_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  monitoring_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  expense_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
+  other_records?: { data?: Record<string, unknown> }[] | { data?: Record<string, unknown> } | null;
 };
 type Crop = { id: string; name: string; group_id?: string | null };
 type PlotCampaign = { plot_id: string; campaign_id: string; crop_id: string; campaigns?: { id: string; name: string; status?: string } | null; crops?: { id: string; name: string } | null };
@@ -160,14 +168,15 @@ function AuthenticatedApp({ session }: { session: Session }) {
     const [fieldResult, plotResult, recordResult, memberResult, cropResult, assignmentResult, colorResult, settingsResult] = await Promise.all([
       supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
-      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,campaign_id,details,fields(name),plots(name),campaigns(id,name)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(500),
+      supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,campaign_id,fields(name),plots(name),campaigns(id,name),sowing_records(data),spraying_records(data),fertilization_records(data),harvest_records(data),work_records(data),monitoring_records(data),expense_records(data),other_records(data)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(500),
       supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", targetGroup).eq("status", "active").order("created_at"),
       supabase.from("crops").select("id,name,group_id").or(`group_id.is.null,group_id.eq.${targetGroup}`).is("deleted_at", null).order("name"),
       supabase.from("plot_campaigns").select("plot_id,campaign_id,crop_id,campaigns(id,name,status),crops(id,name)").eq("group_id", targetGroup).is("deleted_at", null),
       supabase.from("group_crop_colors").select("crop_id,color").eq("group_id", targetGroup),
       supabase.from("app_settings").select("appearance,area_unit,date_format,notifications_enabled").eq("group_id", targetGroup).eq("user_id", session.user.id).maybeSingle()
     ]);
-    if (fieldResult.error || plotResult.error) setError(fieldResult.error?.message ?? plotResult.error?.message ?? "");
+    const criticalError = fieldResult.error ?? plotResult.error ?? recordResult.error;
+    if (criticalError) setError(criticalError.message);
     setFields((fieldResult.data ?? []) as Field[]);
     setPlots((plotResult.data ?? []) as unknown as Plot[]);
     setRecords((recordResult.data ?? []) as unknown as RecordRow[]);
@@ -544,7 +553,9 @@ function formatDate(value: string) { const date = new Date(`${value}T12:00:00`);
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
 function plotColor(plot: Plot, layer: string) { if (layer === "prioridad") return plot.priority_color || "#718078"; return plot.cropColor || "#77847e"; }
 function recordCrop(row: RecordRow) {
-  const details = row.details ?? {};
+  const relationNames = ["sowing_records", "spraying_records", "fertilization_records", "harvest_records", "work_records", "monitoring_records", "expense_records", "other_records"] as const;
+  const embedded = relationNames.map(name => relation(row[name])?.data).find(Boolean) ?? {};
+  const details = { ...embedded, ...(row.details ?? {}) } as Record<string, unknown>;
   return String(details.crop ?? details.cultivo ?? details.crop_name ?? "");
 }
 function defaultCropColor(name: string) {
