@@ -268,7 +268,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} selectedPlot={selectedPlot ? resolvePlotCrops([selectedPlot], records, assignments, cropColors, crops)[0] : null} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
         {view === "registros" && <RealRecordsView records={records}/>}
         {view === "gestion" && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} crops={crops} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} onMap={() => setView("mapa")} onSaved={() => void loadGroupData(groupId, true)}/>}
@@ -280,8 +280,9 @@ function AuthenticatedApp({ session }: { session: Session }) {
   </div>;
 }
 
-function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onSaved }: {
+function RealMapView({ fields, plots, records, campaigns, assignments, cropColors, crops, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onSaved }: {
   fields: Field[]; plots: Plot[]; records: RecordRow[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
+  campaigns: Campaign[]; assignments: PlotCampaign[]; cropColors: CropColor[]; crops: Crop[];
   groupId: string; userId: string; canManageLots: boolean; onSaved: () => void;
 }) {
   const mapNode = useRef<HTMLDivElement>(null);
@@ -300,11 +301,42 @@ function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, gr
   const [satellitePlotId, setSatellitePlotId] = useState("");
   const [satellitePreviews, setSatellitePreviews] = useState<Record<string, string>>({});
   const [detailRecord, setDetailRecord] = useState<RecordRow | null>(null);
-  const mapPlots = useMemo<MapPlot[]>(() => plots.map(plot => {
+  const [campaignFilterId, setCampaignFilterId] = useState("");
+  const [monitoringDays, setMonitoringDays] = useState<number | null>(null);
+  const [filterPanel, setFilterPanel] = useState<"campaign" | "monitoring" | null>(null);
+  const recordsRef = useRef(records);
+  useEffect(() => { recordsRef.current = records; }, [records]);
+  const activeCampaignId = campaigns.find(campaign => campaign.status === "active")?.id;
+  const preferredCampaignId = campaignFilterId || activeCampaignId;
+  const visiblePlotIds = useMemo(() => {
+    if (!campaignFilterId) return null;
+    return new Set([
+      ...assignments.filter(item => item.campaign_id === campaignFilterId).map(item => item.plot_id),
+      ...records.filter(row => row.campaign_id === campaignFilterId && row.plot_id).map(row => row.plot_id as string)
+    ]);
+  }, [campaignFilterId, assignments, records]);
+  const displayPlots = useMemo(() => resolvePlotCrops(
+    visiblePlotIds ? plots.filter(plot => visiblePlotIds.has(plot.id)) : plots,
+    records, assignments, cropColors, crops, preferredCampaignId
+  ), [plots, records, assignments, cropColors, crops, preferredCampaignId, visiblePlotIds]);
+  const monitoringRecords = useMemo(() => {
+    if (!monitoringDays) return [];
+    const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - monitoringDays);
+    return records.filter(row => {
+      if (row.record_type !== "monitoring" || (campaignFilterId && row.campaign_id !== campaignFilterId)) return false;
+      const data = recordData(row);
+      const status = normalizeText(String(data.gps_status ?? ""));
+      const latitude = number(data.gps_latitude as string | number | null);
+      const longitude = number(data.gps_longitude as string | number | null);
+      const date = new Date(`${row.record_date}T12:00:00`);
+      return status === "dentro del lote" && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 && (latitude !== 0 || longitude !== 0) && date >= cutoff;
+    });
+  }, [records, monitoringDays, campaignFilterId]);
+  const mapPlots = useMemo<MapPlot[]>(() => displayPlots.map(plot => {
     const feature = geometry(plot.geometry_json);
     if (!feature) return null;
     return { ...plot, feature, fieldName: relation(plot.fields)?.name ?? fields.find(field => field.id === plot.field_id)?.name ?? "Campo" };
-  }).filter(Boolean) as MapPlot[], [plots, fields]);
+  }).filter(Boolean) as MapPlot[], [displayPlots, fields]);
 
   const refreshSources = useCallback((map: MapLibreMap, drawPoints = points) => {
     const collection = {
@@ -326,8 +358,15 @@ function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, gr
       type: "FeatureCollection",
       features: drawPoints.map((point, index) => ({ type: "Feature", properties: { index }, geometry: { type: "Point", coordinates: point } }))
     });
+    (map.getSource("monitorings") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: monitoringRecords.map(row => {
+        const data = recordData(row);
+        return { type: "Feature", properties: { id: row.id }, geometry: { type: "Point", coordinates: [number(data.gps_longitude as string | number), number(data.gps_latitude as string | number)] } };
+      })
+    });
     if (map.getLayer("plot-fill")) map.setPaintProperty("plot-fill", "fill-opacity", layer === "sin-relleno" ? 0 : .48);
-  }, [mapPlots, layer, points]);
+  }, [mapPlots, layer, points, monitoringRecords]);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -343,11 +382,13 @@ function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, gr
       map.addSource("plots", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("drawing", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("vertices", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("monitorings", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("sentinel-image", { type: "image", url: transparentPixel(), coordinates: [[-60.3,-34.7],[-60.2,-34.7],[-60.2,-34.8],[-60.3,-34.8]] });
       map.addLayer({ id: "sentinel-layer", type: "raster", source: "sentinel-image", paint: { "raster-opacity": .82 } });
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
       map.addLayer({ id: "plot-line", type: "line", source: "plots", paint: { "line-color": "#ffffff", "line-width": 1.7 } });
       map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "name"], "text-size": 13, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
+      map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": "#ff2f72", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
       map.addLayer({ id: "draw-fill", type: "fill", source: "drawing", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#63dc42", "fill-opacity": .28 } });
       map.addLayer({ id: "draw-line", type: "line", source: "drawing", paint: { "line-color": "#a7ff79", "line-width": 3 } });
       map.addLayer({ id: "draw-points", type: "circle", source: "vertices", paint: { "circle-radius": 6, "circle-color": "#f8fff4", "circle-stroke-color": "#1e7b45", "circle-stroke-width": 3 } });
@@ -357,6 +398,10 @@ function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, gr
         if (drawing) return;
         const id = event.features?.[0]?.properties?.id;
         setSelectedPlot(plots.find(plot => plot.id === id) ?? null);
+      });
+      map.on("click", "monitoring-points", event => {
+        const id = event.features?.[0]?.properties?.id;
+        setDetailRecord(recordsRef.current.find(row => row.id === id) ?? null);
       });
     });
     mapRef.current = map;
@@ -434,17 +479,21 @@ function RealMapView({ fields, plots, records, selectedPlot, setSelectedPlot, gr
 
   return <div className="map-workspace">
     <div ref={mapNode} className="map-canvas"/>
-    <div className="map-search"><Search/><span>{mapPlots.length} lotes georreferenciados</span></div>
+    <div className="map-search"><Search/><span>{mapPlots.length} lotes georreferenciados{campaignFilterId ? " en la campaña" : ""}</span></div>
     {!drawing && !draft && <div className="map-toolbar">
       <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : ""}><Plus/><span>Dibujar lote</span></button>
       <button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)}><MapPin/><span>Ver todos</span></button>
       <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""}><Satellite/><span>Sentinel-2</span></button>
+      <button onClick={() => setFilterPanel(current => current === "campaign" ? null : "campaign")} className={campaignFilterId ? "selected" : ""}><Filter/><span>Campaña</span></button>
+      <button onClick={() => setFilterPanel(current => current === "monitoring" ? null : "monitoring")} className={monitoringDays ? "selected" : ""}><Activity/><span>Monitoreos</span></button>
       <button onClick={onSaved}><RotateCcw/><span>Actualizar</span></button>
     </div>}
+    {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
+    {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days"><button className={!monitoringDays ? "active" : ""} onClick={() => setMonitoringDays(null)}>Ocultar</button>{[3,7,15,30].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days} días</button>)}</div><small>Solo se muestran monitoreos tomados dentro del lote con GPS válido.</small></div>}
     <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
-    {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
+    {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
     {satelliteOpen && <aside className="satellite-panel real-satellite"><div className="sat-top"><div><span className="eyebrow">COPERNICUS · SENTINEL-2</span><strong>Imágenes satelitales</strong></div><button onClick={() => setSatelliteOpen(false)}><X/></button></div>
       <label className="sat-plot-picker">Lote<select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
       <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, 10), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
@@ -646,13 +695,19 @@ function defaultCropColor(name: string) {
   let hash = 0; for (const char of name.toLowerCase()) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
   return palette[Math.abs(hash) % palette.length];
 }
-function normalizeCropName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es"); }
-function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[], crops: Crop[]) {
+function normalizeText(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es"); }
+function normalizeCropName(value: string) { return normalizeText(value); }
+function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[], crops: Crop[], preferredCampaignId?: string) {
   return plots.map(plot => {
-    const newest = records.filter(row => row.plot_id === plot.id && recordCrop(row)).sort((a, b) => String(b.record_date).localeCompare(String(a.record_date)))[0];
-    const activeAssignment = assignments.find(item => item.plot_id === plot.id && relation(item.campaigns)?.status === "active") ?? assignments.find(item => item.plot_id === plot.id);
+    const plotRecords = records.filter(row => row.plot_id === plot.id && recordCrop(row));
+    const campaignRecords = preferredCampaignId ? plotRecords.filter(row => row.campaign_id === preferredCampaignId) : plotRecords;
+    const newest = campaignRecords.sort((a, b) => String(b.record_date).localeCompare(String(a.record_date)))[0];
+    const preferredAssignment = assignments.find(item => item.plot_id === plot.id && item.campaign_id === preferredCampaignId);
+    const activeAssignment = preferredAssignment ?? assignments.find(item => item.plot_id === plot.id && relation(item.campaigns)?.status === "active") ?? assignments.find(item => item.plot_id === plot.id);
     const name = newest ? recordCrop(newest) : relation(activeAssignment?.crops)?.name ?? null;
-    const cropId = crops.find(crop => name && normalizeCropName(crop.name) === normalizeCropName(name))?.id ?? activeAssignment?.crop_id;
+    const matchingAssignment = assignments.find(item => item.plot_id === plot.id && (!preferredCampaignId || item.campaign_id === preferredCampaignId) && name && normalizeCropName(relation(item.crops)?.name ?? "") === normalizeCropName(name));
+    const catalogMatch = crops.filter(crop => name && normalizeCropName(crop.name) === normalizeCropName(name)).sort((a, b) => Number(Boolean(b.group_id)) - Number(Boolean(a.group_id)))[0];
+    const cropId = matchingAssignment?.crop_id ?? catalogMatch?.id ?? activeAssignment?.crop_id;
     return { ...plot, cropName: name, cropColor: (cropId && colors.find(item => item.crop_id === cropId)?.color) || (name ? defaultCropColor(name) : "#77847e") };
   });
 }
