@@ -14,7 +14,7 @@ import {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_waHR1lcMgPHyP32KlyBcEw_uAL6n6-g";
 
-type View = "mapa" | "campos" | "registros" | "gestion" | "reportes" | "equipo" | "configuracion";
+type View = "mapa" | "campos" | "registros" | "campanas" | "reportes" | "equipo" | "configuracion";
 type Group = { id: string; name: string; description?: string | null };
 type PermissionOverride = { permission: string; allowed: boolean };
 type Membership = {
@@ -50,7 +50,7 @@ type Campaign = { id: string; name: string; start_date: string; end_date: string
 type ClientRow = { id: string; name: string; cuit?: string | null; phone?: string | null; email?: string | null };
 type Supply = { id:string; name:string; category:string; unit:string; unit_price:number|string; currency:string };
 type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
-type Member = { user_id: string; role: string; status: string; profiles?: Profile | null };
+type Member = { user_id: string; role: string; status: string; profiles?: Profile | null; member_permission_overrides?: PermissionOverride[] | null };
 type GeoFeature = {
   type: "Feature";
   geometry: { type: "Polygon"; coordinates: number[][][] };
@@ -63,7 +63,7 @@ const nav = [
   { id: "mapa" as View, label: "Mapa", icon: Map },
   { id: "campos" as View, label: "Campos", icon: Sprout },
   { id: "registros" as View, label: "Registros", icon: FileText },
-  { id: "gestion" as View, label: "Gestión", icon: Grid2X2 },
+  { id: "campanas" as View, label: "Campañas", icon: CalendarDays },
   { id: "reportes" as View, label: "Reportes", icon: TrendingUp },
   { id: "equipo" as View, label: "Equipo", icon: Users }
 ];
@@ -159,6 +159,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [settings, setSettings] = useState<AppSettings>({ appearance: "system", area_unit: "ha", date_format: "dd-MM-yyyy", notifications_enabled: true });
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
   const [pendingRecord, setPendingRecord] = useState<{ plotId: string; type: string } | null>(null);
+  const [pendingForm, setPendingForm] = useState<"field"|"campaign"|"client"|"record"|null>(null);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) ?? null;
@@ -188,7 +189,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("records").select("id,record_type,record_date,worked_area,field_id,plot_id,campaign_id,fields(name),plots(name),campaigns(id,name),sowing_records(data),spraying_records(data),fertilization_records(data),harvest_records(data),work_records(data),monitoring_records(data),expense_records(data),other_records(data)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(500),
-      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email)").eq("group_id", targetGroup).eq("status", "active").order("created_at"),
+      supabase.from("group_members").select("user_id,role,status,profiles!group_members_user_id_fkey(id,first_name,last_name,username,email),member_permission_overrides(permission,allowed)").eq("group_id", targetGroup).eq("status", "active").order("created_at"),
       supabase.from("crops").select("id,name,group_id").or(`group_id.is.null,group_id.eq.${targetGroup}`).is("deleted_at", null).order("name"),
       supabase.from("plot_campaigns").select("plot_id,campaign_id,crop_id,campaigns(id,name,status),crops(id,name)").eq("group_id", targetGroup).is("deleted_at", null),
       supabase.from("group_crop_colors").select("crop_id,color").eq("group_id", targetGroup),
@@ -274,13 +275,14 @@ function AuthenticatedApp({ session }: { session: Session }) {
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {!groupId ? <EmptyWorkspace/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setView("gestion"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
-        {view === "registros" && <RealRecordsView records={records}/>}
-        {view === "gestion" && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onMap={() => setView("mapa")} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields")} onCreate={() => setPendingForm("field")} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
+        {view === "registros" && <RealRecordsView records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
+        {view === "campanas" && <CampaignsView campaigns={campaigns} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops}/>}
-        {view === "equipo" && <RealTeamView groupId={groupId} members={members} canManage={hasPermission("manage_members")} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} onSaved={setSettings}/>}
+        {view === "equipo" && <RealTeamView groupId={groupId} members={members} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
+        {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
       </>}
     </main>
   </div>;
@@ -400,8 +402,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addSource("vertices", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("monitorings", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("sentinel-image", { type: "image", url: transparentPixel(), coordinates: [[-60.3,-34.7],[-60.2,-34.7],[-60.2,-34.8],[-60.3,-34.8]] });
-      map.addLayer({ id: "sentinel-layer", type: "raster", source: "sentinel-image", paint: { "raster-opacity": .82 } });
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
+      map.addLayer({ id: "sentinel-layer", type: "raster", source: "sentinel-image", paint: { "raster-opacity": .82, "raster-fade-duration": 180 } });
       map.addLayer({ id: "plot-line", type: "line", source: "plots", paint: { "line-color": "#ffffff", "line-width": 1.7 } });
       map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "name"], "text-size": 13, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
       map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
@@ -599,9 +601,9 @@ function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => v
   return <div className="record-detail-backdrop"><article className="record-detail-sheet"><header><button className="icon-button" onClick={onClose}><ChevronLeft/></button><div><span className="eyebrow">{record.record_type === "monitoring" ? "MONITOREO" : "REGISTRO"}</span><h2>{recordType(record.record_type)}{recordCrop(record) ? ` · ${recordCrop(record)}` : ""}</h2><p>{relation(record.fields)?.name || "Campo"} · {relation(record.plots)?.name || "Sin lote"}</p></div><button className="icon-button" onClick={onClose}><X/></button></header><div className="detail-hero"><CalendarDays/><div><small>Fecha</small><strong>{formatDate(record.record_date)}</strong></div><div><small>Campaña</small><strong>{relation(record.campaigns)?.name || "Sin campaña"}</strong></div><div><small>Superficie</small><strong>{number(record.worked_area).toLocaleString("es-AR")} ha</strong></div></div><section><h3>Información registrada</h3><div className="detail-grid">{Object.entries(details).filter(([,value]) => value !== null && value !== "").map(([key,value]) => <div key={key}><small>{detailLabel(key)}</small><strong>{String(value)}</strong></div>)}{!Object.keys(details).length && <EmptyLine text="Este registro no tiene datos adicionales."/>}</div></section></article></div>;
 }
 
-function RealFieldsView({ fields, plots, onOpenPlot }: { fields: Field[]; plots: Plot[]; onOpenPlot: (plot: Plot) => void }) {
+function RealFieldsView({ fields, plots, onOpenPlot, canCreate, onCreate }: { fields: Field[]; plots: Plot[]; onOpenPlot: (plot: Plot) => void; canCreate:boolean; onCreate:()=>void }) {
   const [openField, setOpenField] = useState<string | null>(fields[0]?.id ?? null);
-  return <div className="page-content"><PageHead title="Campos" text="Abrí un campo para consultar sus lotes, superficie y cultivos."/>
+  return <div className="page-content"><PageHead title="Campos" text="Abrí un campo para consultar sus lotes, superficie y cultivos." action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>Crear campo</button>:undefined}/>
     <div className="stats-grid"><Stat label="Campos activos" value={String(fields.length)} detail={`${sum(fields.map(f => number(f.arable_area))).toLocaleString("es-AR")} ha sembrables`} icon={MapPin}/><Stat label="Lotes" value={String(plots.length)} detail={`${plots.filter(p => geometry(p.geometry_json)).length} georreferenciados`} icon={Grid2X2}/><Stat label="Superficie en lotes" value={`${sum(plots.map(p => number(p.arable_area))).toLocaleString("es-AR")} ha`} detail="Datos sincronizados" icon={Sprout}/></div>
     <div className="field-stack">{fields.map(field => {
       const children = plots.filter(plot => plot.field_id === field.id);
@@ -621,10 +623,14 @@ function RealFieldsView({ fields, plots, onOpenPlot }: { fields: Field[]; plots:
   </div>;
 }
 
-function RealRecordsView({ records }: { records: RecordRow[] }) {
+function RealRecordsView({ records, canCreate, onCreate }: { records: RecordRow[]; canCreate:boolean; onCreate:()=>void }) {
   const [query, setQuery] = useState("");
   const visible = records.filter(row => JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
-  return <div className="page-content"><PageHead title="Registros" text="Actividad real sincronizada con Android."/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por campo, lote o tipo…"/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <article className="record-card" key={row.id}><div className="record-type-icon"><Leaf/></div><div className="record-main"><span>{recordType(row.record_type)}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><p>{number(row.worked_area).toLocaleString("es-AR")} ha</p></div><div className="record-meta"><strong>{formatDate(row.record_date)}</strong><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small></div><button className="icon-button"><ChevronRight/></button></article>)}{!visible.length && <EmptyLine text="No hay registros para mostrar."/>}</div></div>;
+  return <div className="page-content"><PageHead title="Registros" text="Actividad real sincronizada con Android." action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>Nuevo registro</button>:undefined}/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por campo, lote o tipo…"/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <article className="record-card" key={row.id}><div className="record-type-icon"><Leaf/></div><div className="record-main"><span>{recordType(row.record_type)}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><p>{number(row.worked_area).toLocaleString("es-AR")} ha</p></div><div className="record-meta"><strong>{formatDate(row.record_date)}</strong><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small></div><button className="icon-button"><ChevronRight/></button></article>)}{!visible.length && <EmptyLine text="No hay registros para mostrar."/>}</div></div>;
+}
+
+function CampaignsView({ campaigns, canCreate, onCreate }: { campaigns:Campaign[]; canCreate:boolean; onCreate:()=>void }) {
+  return <div className="page-content"><div className="page-head"><div><h2>Campañas</h2><p>Ciclos productivos del grupo activo.</p></div>{canCreate&&<button className="primary-action" onClick={onCreate}><Plus/>Nueva campaña</button>}</div><div className="campaign-grid">{campaigns.map(campaign=><article className="campaign-card" key={campaign.id}><div><CalendarDays/></div><section><span className={`campaign-status ${campaign.status}`}>{campaign.status === "active" ? "Activa" : campaign.status === "planned" ? "Planificada" : "Finalizada"}</span><h3>{campaign.name}</h3><p>{formatDate(campaign.start_date)} · {formatDate(campaign.end_date)}</p></section><ChevronRight/></article>)}{!campaigns.length&&<EmptyLine text="Todavía no hay campañas creadas."/>}</div></div>;
 }
 
 function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; plots: Plot[]; records: RecordRow[]; crops: Crop[] }) {
@@ -649,10 +655,12 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
   </div>;
 }
 
-function RealSettingsView({ groupId, userId, settings, onSaved }: { groupId: string; userId: string; settings: AppSettings; onSaved: (value: AppSettings) => void }) {
+function RealSettingsView({ groupId, userId, settings, group, canManageGroup, onSaved, onGroupSaved }: { groupId: string; userId: string; settings: AppSettings; group:Group|null; canManageGroup:boolean; onSaved: (value: AppSettings) => void; onGroupSaved:()=>void }) {
   const [draft, setDraft] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [groupName,setGroupName]=useState(group?.name??"");
+  const [groupDescription,setGroupDescription]=useState(group?.description??"");
   useEffect(() => setDraft(settings), [settings]);
   async function save() {
     setSaving(true); setMessage("");
@@ -660,6 +668,7 @@ function RealSettingsView({ groupId, userId, settings, onSaved }: { groupId: str
     setSaving(false);
     if (error) setMessage(error.message); else { onSaved(draft); setMessage("Configuración guardada."); }
   }
+  async function saveGroup(){setSaving(true);setMessage("");const {error}=await supabase.from("groups").update({name:groupName.trim(),description:groupDescription.trim()||null}).eq("id",groupId);setSaving(false);if(error)setMessage(error.message);else{setMessage("Grupo actualizado.");onGroupSaved();}}
   return <div className="page-content settings-page"><PageHead title="Configuración" text="Preferencias personales para este grupo."/><div className="settings-grid">
     <section className="content-card"><div className="settings-title"><Settings2/><div><h3>Apariencia y formato</h3><p>La configuración se sincroniza con tu cuenta.</p></div></div>
       <label>Tema<select value={draft.appearance} onChange={e => setDraft({ ...draft, appearance: e.target.value })}><option value="system">Usar tema del dispositivo</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
@@ -668,30 +677,29 @@ function RealSettingsView({ groupId, userId, settings, onSaved }: { groupId: str
       <label className="settings-check"><input type="checkbox" checked={draft.notifications_enabled} onChange={e => setDraft({ ...draft, notifications_enabled: e.target.checked })}/><span><strong>Notificaciones</strong><small>Recibir avisos operativos del grupo.</small></span></label>
       {message && <p className={message.includes("guardada") ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
     </section>
-    <section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Los datos institucionales, miembros, roles y permisos se administran desde la sección Equipo. Las preferencias de esta pantalla solo afectan a tu cuenta.</p></section>
+    {canManageGroup?<section className="content-card group-settings"><div className="settings-title"><Users/><div><h3>Configuración del grupo</h3><p>Visible para todos los integrantes.</p></div></div><label>Nombre del grupo<input value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>Descripción<textarea value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/></label><button className="settings-save" disabled={saving||!groupName.trim()} onClick={saveGroup}><Save/>Guardar grupo</button></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>}
   </div></div>;
 }
 
-function ManagementView({ groupId, userId, fields, plots, campaigns, clients, crops, supplies, canFields, canLots, canCampaigns, canRecords, initialRecord, onInitialRecordConsumed, onMap, onSaved }: { groupId: string; userId: string; fields: Field[]; plots: Plot[]; campaigns: Campaign[]; clients: ClientRow[]; crops: Crop[]; supplies: Supply[]; canFields: boolean; canLots: boolean; canCampaigns: boolean; canRecords: boolean; initialRecord: {plotId:string;type:string}|null; onInitialRecordConsumed:()=>void; onMap: () => void; onSaved: () => void }) {
+function ManagementView({ groupId, userId, fields, plots, campaigns, clients, crops, supplies, initialForm, initialRecord, onInitialRecordConsumed, onClose, onSaved }: { groupId: string; userId: string; fields: Field[]; plots: Plot[]; campaigns: Campaign[]; clients: ClientRow[]; crops: Crop[]; supplies: Supply[]; canFields: boolean; canLots: boolean; canCampaigns: boolean; canRecords: boolean; initialForm:"field"|"campaign"|"client"|"record"; initialRecord: {plotId:string;type:string}|null; onInitialRecordConsumed:()=>void; onClose:()=>void; onMap: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<"field"|"campaign"|"client"|"record"|null>(null);
   const [data, setData] = useState<Record<string,string>>({}); const [saving,setSaving]=useState(false); const [message,setMessage]=useState("");
   function open(value: typeof form, seed?: {plotId:string;type:string}){const selected=seed?plots.find(plot=>plot.id===seed.plotId):null;const recordType=seed?.type??"sowing";const initial:Record<string,string>=value === "record" ? { record_type:recordType, record_date:new Date().toISOString().slice(0,10), campaign_id:campaigns.find(c=>c.status==="active")?.id ?? campaigns[0]?.id ?? "", plot_id:selected?.id??"",field_id:selected?.field_id??"",worked_area:String(selected?.arable_area??""),monitoring_priority:"3",input_lines_json:["sowing","spraying","fertilization"].includes(recordType)?JSON.stringify([{inputId:"",name:"",dose:"",price:"",unit:""}]):"" } : {};setForm(value);setData(initial);setMessage("");if(seed?.type==="monitoring"&&selected&&navigator.geolocation){navigator.geolocation.getCurrentPosition(position=>{const point:[number,number]=[position.coords.longitude,position.coords.latitude];const feature=geometry(selected.geometry_json);setData(current=>({...current,gps_latitude:String(point[1]),gps_longitude:String(point[0]),gps_accuracy_m:String(position.coords.accuracy),gps_captured_at:new Date(position.timestamp).toISOString(),gps_status:feature&&pointInsidePolygon(point,feature)?"Dentro del lote":"Fuera del lote"}));},()=>setData(current=>({...current,gps_status:"Ubicación no disponible"})),{enableHighAccuracy:true,timeout:12000});}}
-  useEffect(()=>{if(initialRecord){open("record",initialRecord);onInitialRecordConsumed();}},[initialRecord]);
+  useEffect(()=>{open(initialForm, initialRecord ?? undefined);if(initialRecord)onInitialRecordConsumed();},[initialForm]);
   async function save(event: FormEvent){event.preventDefault();setSaving(true);setMessage("");let error: {message:string}|null=null;
     if(form==="field")({error}=await supabase.from("fields").insert({id:crypto.randomUUID(),group_id:groupId,client_id:data.client_id||null,name:data.name?.trim(),location:data.location||null,locality:data.locality||null,province:data.province||null,total_area:number(data.total_area),arable_area:number(data.arable_area),created_by:userId}));
     if(form==="client")({error}=await supabase.from("clients").insert({id:crypto.randomUUID(),group_id:groupId,name:data.name?.trim(),cuit:data.cuit?.replace(/\D/g,"")||null,phone:data.phone||null,email:data.email||null,created_by:userId}));
     if(form==="campaign")({error}=await supabase.from("campaigns").insert({id:crypto.randomUUID(),group_id:groupId,name:data.name?.trim(),start_date:data.start_date,end_date:data.end_date,status:"planned",created_by:userId}));
     if(form==="record"){const selectedPlot=plots.find(p=>p.id===data.plot_id);const details=recordDetailsPayload(data);const storedType=["napa","soil_analysis"].includes(data.record_type)?"other":data.record_type;const result=await supabase.rpc("save_activity_record",{p_id:null,p_group_id:groupId,p_campaign_id:data.campaign_id,p_field_id:data.field_id||selectedPlot?.field_id||null,p_plot_id:data.plot_id||null,p_type:storedType,p_date:data.record_date,p_worked_area:data.record_type==="napa"?null:number(data.worked_area)||null,p_responsible_id:null,p_contractor:["monitoring","napa"].includes(data.record_type)?"":data.contractor||"",p_machinery:["monitoring","napa"].includes(data.record_type)?"":data.machinery||"",p_observations:data.record_type==="napa"?"":data.observations||"",p_allow_member_edits:data.record_type==="monitoring"?false:data.allow_member_edits==="true",p_data:details});error=result.error;}
     setSaving(false);if(error)setMessage(error.message);else{setForm(null);onSaved();}}
-  const cards=[{key:"field" as const,title:"Nuevo campo",text:"Establecimiento, superficie y ubicación",icon:MapPin,enabled:canFields},{key:"lot" as const,title:"Nuevo lote",text:"Dibujalo y asignalo a un campo",icon:Grid2X2,enabled:canLots},{key:"campaign" as const,title:"Nueva campaña",text:"Ciclo productivo y fechas",icon:CalendarDays,enabled:canCampaigns},{key:"client" as const,title:"Nuevo cliente",text:"Titular o empresa vinculada",icon:Users,enabled:canFields},{key:"record" as const,title:"Nuevo registro",text:"Actividad agrícola o monitoreo",icon:FileText,enabled:canRecords}];
-  return <div className="page-content"><PageHead title="Centro de gestión" text="Creá y administrá la operación sin salir de la web."/><div className="management-grid">{cards.map(item=><button key={item.key} disabled={!item.enabled} onClick={()=>item.key==="lot"?onMap():open(item.key)}><div><item.icon/></div><section><h3>{item.title}</h3><p>{item.text}</p></section><ChevronRight/></button>)}</div><div className="management-counts"><Kpi label="Campos" value={String(fields.length)}/><Kpi label="Lotes" value={String(plots.length)}/><Kpi label="Campañas" value={String(campaigns.length)}/><Kpi label="Clientes" value={String(clients.length)}/></div>
-    {form&&<div className="record-detail-backdrop"><form className="entity-form" onSubmit={save}><header><div><span className="eyebrow">NUEVA ALTA</span><h2>{formTitle(form)}</h2></div><button type="button" className="icon-button" onClick={()=>setForm(null)}><X/></button></header>
+  return <div className="creation-host">
+    {form&&<div className="record-detail-backdrop"><form className="entity-form" onSubmit={save}><header><div><span className="eyebrow">NUEVA ALTA</span><h2>{formTitle(form)}</h2></div><button type="button" className="icon-button" onClick={onClose}><X/></button></header>
       {(form==="field"||form==="client"||form==="campaign")&&<label>Nombre<input required value={data.name||""} onChange={e=>setData({...data,name:e.target.value})}/></label>}
       {form==="field"&&<><label>Cliente<select value={data.client_id||""} onChange={e=>setData({...data,client_id:e.target.value})}><option value="">Sin cliente</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><div className="form-pair"><label>Superficie total (ha)<input required inputMode="decimal" value={data.total_area||""} onChange={e=>setData({...data,total_area:e.target.value})}/></label><label>Superficie sembrable (ha)<input required inputMode="decimal" value={data.arable_area||""} onChange={e=>setData({...data,arable_area:e.target.value})}/></label></div><div className="form-pair"><label>Localidad<input value={data.locality||""} onChange={e=>setData({...data,locality:e.target.value})}/></label><label>Provincia<input value={data.province||""} onChange={e=>setData({...data,province:e.target.value})}/></label></div></>}
       {form==="client"&&<div className="form-pair"><label>CUIT<input value={data.cuit||""} onChange={e=>setData({...data,cuit:e.target.value})}/></label><label>Teléfono<input value={data.phone||""} onChange={e=>setData({...data,phone:e.target.value})}/></label><label>Correo<input type="email" value={data.email||""} onChange={e=>setData({...data,email:e.target.value})}/></label></div>}
       {form==="campaign"&&<div className="form-pair"><label>Fecha de inicio<input required type="date" value={data.start_date||""} onChange={e=>setData({...data,start_date:e.target.value})}/></label><label>Fecha de cierre<input required type="date" value={data.end_date||""} onChange={e=>setData({...data,end_date:e.target.value})}/></label></div>}
       {form==="record"&&<RecordWizard data={data} setData={setData} fields={fields} plots={plots} campaigns={campaigns} crops={crops} supplies={supplies}/>} 
-      {message&&<p className="form-error">{message}</p>}<div className="entity-actions"><button type="button" onClick={()=>setForm(null)}>Cancelar</button><button className="save" disabled={saving||(form==="record"&&!recordReady(data))}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar</button></div></form></div>}
+      {message&&<p className="form-error">{message}</p>}<div className="entity-actions"><button type="button" onClick={onClose}>Cancelar</button><button className="save" disabled={saving||(form==="record"&&!recordReady(data))}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar</button></div></form></div>}
   </div>;
 }
 
@@ -758,9 +766,20 @@ function recordDetailsPayload(data:Record<string,string>){
   return details;
 }
 
+const permissionCatalog=[
+  ["view_fields","Ver campos y lotes"],["manage_fields","Crear y editar campos"],["manage_lots","Crear y editar lotes"],
+  ["view_records","Ver registros"],["create_records","Crear registros"],["edit_records","Editar registros"],
+  ["create_monitoring","Crear monitoreos"],["view_satellite","Ver imágenes satelitales"],["view_ndvi","Analizar NDVI"],
+  ["manage_campaigns","Administrar campañas"],["export_reports","Exportar reportes"],["manage_members","Administrar equipo"]
+] as const;
+function roleDefault(role:string,permission:string){if(role==="owner")return true;if(role==="admin")return true;if(role==="agronomist")return ["view_fields","view_records","create_records","edit_records","create_monitoring","view_satellite","view_ndvi","export_reports"].includes(permission);if(role==="operator")return ["view_fields","view_records","create_records","create_monitoring"].includes(permission);return ["view_fields","view_records"].includes(permission)}
 function RealTeamView({ groupId, members, canManage, onSaved }: { groupId:string; members: Member[]; canManage:boolean; onSaved:()=>void }) {
-  const [busy,setBusy]=useState("");const [message,setMessage]=useState("");async function role(userId:string,role:string){setBusy(userId);const {error}=await supabase.rpc("change_member_role",{p_group_id:groupId,p_user_id:userId,p_role:role});setBusy("");if(error)setMessage(error.message);else onSaved();}async function remove(userId:string){if(!confirm("¿Quitar este usuario del grupo?"))return;setBusy(userId);const {error}=await supabase.rpc("remove_group_member",{p_group_id:groupId,p_user_id:userId});setBusy("");if(error)setMessage(error.message);else onSaved();}
-  return <div className="page-content"><PageHead title="Equipo" text="Miembros activos del grupo seleccionado."/>{message&&<p className="form-error">{message}</p>}<div className="team-grid">{members.map(member => { const profile = relation(member.profiles); const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "Usuario"; return <article className="member-card" key={member.user_id}><div className="member-avatar">{initials(name)}</div><div><h3>{name}</h3><p>{roleName(member.role)}</p></div><span className="member-active"><i/>Activo</span><div className="access"><small>Cuenta</small><strong>{profile?.email ?? "Sin correo visible"}</strong></div>{canManage&&member.role!=="owner"&&<div className="member-admin"><select disabled={busy===member.user_id} value={member.role} onChange={e=>void role(member.user_id,e.target.value)}>{["admin","agronomist","operator","producer","member"].map(r=><option key={r} value={r}>{roleName(r)}</option>)}</select><button disabled={busy===member.user_id} onClick={()=>void remove(member.user_id)}>Quitar</button></div>}</article>; })}{!members.length && <EmptyLine text="No hay miembros visibles."/>}</div></div>;
+  const [busy,setBusy]=useState("");const [message,setMessage]=useState("");const [selected,setSelected]=useState<Member|null>(null);const [draft,setDraft]=useState<Record<string,boolean>>({});
+  async function role(userId:string,nextRole:string){setBusy(userId);const {error}=await supabase.rpc("change_member_role",{p_group_id:groupId,p_user_id:userId,p_role:nextRole});setBusy("");if(error)setMessage(error.message);else onSaved();}
+  async function remove(userId:string){if(!confirm("¿Quitar este usuario del grupo?"))return;setBusy(userId);const {error}=await supabase.rpc("remove_group_member",{p_group_id:groupId,p_user_id:userId});setBusy("");if(error)setMessage(error.message);else{setSelected(null);onSaved();}}
+  function openMember(member:Member){setSelected(member);setDraft(Object.fromEntries(permissionCatalog.map(([key])=>[key,member.member_permission_overrides?.find(item=>item.permission===key)?.allowed??roleDefault(member.role,key)])))}
+  async function savePermissions(){if(!selected)return;setBusy(selected.user_id);const rows=permissionCatalog.map(([permission])=>({group_id:groupId,user_id:selected.user_id,permission,allowed:Boolean(draft[permission])}));const {error}=await supabase.from("member_permission_overrides").upsert(rows,{onConflict:"group_id,user_id,permission"});setBusy("");if(error)setMessage(error.message);else{setSelected(null);onSaved();}}
+  return <div className="page-content"><PageHead title="Equipo" text="Roles y permisos efectivos del grupo."/>{message&&<p className="form-error">{message}</p>}<div className="team-grid">{members.map(member=>{const profile=relation(member.profiles);const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(" ")||profile?.username||"Usuario";return <button className="member-card member-card-button" key={member.user_id} onClick={()=>openMember(member)}><div className="member-avatar">{initials(name)}</div><div><h3>{name}</h3><p>{roleName(member.role)}</p></div><span className="member-active"><i/>Activo</span><div className="access"><small>Cuenta</small><strong>{profile?.email??"Sin correo visible"}</strong></div><ChevronRight/></button>})}{!members.length&&<EmptyLine text="No hay miembros visibles."/>}</div>{selected&&<div className="record-detail-backdrop"><article className="permission-sheet"><header><div><span className="eyebrow">MIEMBRO DEL EQUIPO</span><h2>{[relation(selected.profiles)?.first_name,relation(selected.profiles)?.last_name].filter(Boolean).join(" ")}</h2><p>{relation(selected.profiles)?.email}</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X/></button></header><label>Rol<select disabled={!canManage||selected.role==="owner"||busy===selected.user_id} value={selected.role} onChange={e=>{void role(selected.user_id,e.target.value);setSelected({...selected,role:e.target.value})}}>{["admin","agronomist","operator","monitor","producer","member"].map(r=><option key={r} value={r}>{roleName(r)}</option>)}</select></label><section><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!canManage||selected.role==="owner"} checked={Boolean(draft[key])} onChange={e=>setDraft({...draft,[key]:e.target.checked})}/></label>)}</div></section>{canManage&&selected.role!=="owner"&&<footer><button className="danger-button" onClick={()=>void remove(selected.user_id)}>Quitar del grupo</button><button className="settings-save" onClick={()=>void savePermissions()}><Save/>Guardar permisos</button></footer>}</article></div>}</div>;
 }
 
 function Brand() {
@@ -769,10 +788,10 @@ function Brand() {
 function LoadingScreen({ text }: { text: string }) { return <div className="loading-screen"><img className="splash-logo" src="/growr360-logo.png" alt="Growr360"/><LoaderCircle className="spin"/><strong>{text}</strong></div>; }
 function EmptyWorkspace() { return <div className="empty-workspace"><Users/><h2>Tu cuenta todavía no tiene un grupo activo</h2><p>Creá un grupo o enviá una solicitud desde la aplicación móvil. Cuando te acepten, aparecerá acá automáticamente.</p></div>; }
 function EmptyLine({ text }: { text: string }) { return <div className="empty-line">{text}</div>; }
-function PageHead({ title, text }: { title: string; text: string }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div></div>; }
+function PageHead({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div>{action}</div>; }
 function Stat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof MapPin }) { return <div className="stat-card"><div><Icon/></div><section><small>{label}</small><strong>{value}</strong><p>{detail}</p></section></div>; }
 function Kpi({ label, value }: { label: string; value: string }) { return <div className="kpi"><small>{label}</small><strong>{value}</strong><span className="positive">Datos reales</span></div>; }
-function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", gestion: "Altas y operación del grupo", reportes: "Indicadores del grupo activo", equipo: "Miembros y roles", configuracion: "Preferencias personales", mapa: "" } as Record<View, string>)[view]; }
+function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", campanas: "Ciclos productivos", reportes: "Gráficos del grupo activo", equipo: "Miembros, roles y permisos", configuracion: "Preferencias y grupo", mapa: "" } as Record<View, string>)[view]; }
 function formTitle(value:string){return({field:"Crear campo",campaign:"Crear campaña",client:"Crear cliente",record:"Crear registro"}as Record<string,string>)[value]??"Nueva alta";}
 function cap(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "G"; }
