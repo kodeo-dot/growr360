@@ -7,7 +7,8 @@ import {
   Activity, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleUserRound, FileText, Filter, Grid2X2, Layers3, Leaf, LoaderCircle, LogOut,
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
-  TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3
+  TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
+  Compass, LocateFixed
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -310,6 +311,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [campaignFilterId, setCampaignFilterId] = useState("");
   const [monitoringDays, setMonitoringDays] = useState<number | null>(null);
   const [filterPanel, setFilterPanel] = useState<"campaign" | "monitoring" | null>(null);
+  const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const [baseMap, setBaseMap] = useState<"satellite" | "streets">("satellite");
   const recordsRef = useRef(records);
   useEffect(() => { recordsRef.current = records; }, [records]);
   const activeCampaignId = campaigns.find(campaign => campaign.status === "active")?.id;
@@ -382,7 +385,13 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       center: [-60.2, -34.8],
       zoom: 7,
       maxZoom: 18,
-      style: { version: 8, sources: { satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri" } }, layers: [{ id: "satellite", type: "raster", source: "satellite" }] }
+      style: { version: 8, sources: {
+        streets: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "OpenStreetMap" },
+        satellite: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, attribution: "Esri" }
+      }, layers: [
+        { id: "streets", type: "raster", source: "streets", layout: { visibility: "none" } },
+        { id: "satellite", type: "raster", source: "satellite" }
+      ] }
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
     map.on("load", () => {
@@ -418,6 +427,13 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   }, []);
 
   useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current); }, [refreshSources]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.loaded()) return;
+    map.setLayoutProperty("satellite", "visibility", baseMap === "satellite" ? "visible" : "none");
+    map.setLayoutProperty("streets", "visibility", baseMap === "streets" ? "visible" : "none");
+  }, [baseMap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -484,20 +500,32 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     setSatelliteLoading(false);
   }
 
+  function locateUser() {
+    if (!navigator.geolocation || !mapRef.current) return;
+    navigator.geolocation.getCurrentPosition(
+      position => mapRef.current?.flyTo({ center: [position.coords.longitude, position.coords.latitude], zoom: 16, essential: true }),
+      () => setSatelliteError("No pudimos obtener tu ubicación. Revisá el permiso del navegador."),
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  }
+
   return <div className="map-workspace">
     <div ref={mapNode} className="map-canvas"/>
     <div className="map-search"><Search/><span>{mapPlots.length} lotes georreferenciados{campaignFilterId ? " en la campaña" : ""}</span></div>
+    <button className="map-compass" title="Orientar el norte hacia arriba" aria-label="Orientar el norte hacia arriba" onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 500 })}><Compass/></button>
     {!drawing && !draft && <div className="map-toolbar">
-      <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : ""}><Plus/><span>Dibujar lote</span></button>
-      <button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)}><MapPin/><span>Ver todos</span></button>
-      <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""}><Satellite/><span>Sentinel-2</span></button>
-      <button onClick={() => setFilterPanel(current => current === "campaign" ? null : "campaign")} className={campaignFilterId ? "selected" : ""}><Filter/><span>Campaña</span></button>
-      <button onClick={() => setFilterPanel(current => current === "monitoring" ? null : "monitoring")} className={monitoringDays ? "selected" : ""}><Activity/><span>Monitoreos</span></button>
-      <button onClick={onSaved}><RotateCcw/><span>Actualizar</span></button>
+      <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : "Dibujar nuevo lote"}><Plus/><span>Dibujar lote</span></button>
+      <button onClick={locateUser} title="Centrar en mi ubicación"><LocateFixed/><span>Mi ubicación</span></button>
+      <button onClick={() => setBaseMap(current => current === "satellite" ? "streets" : "satellite")} className={baseMap === "streets" ? "selected" : ""} title="Cambiar mapa base"><Map/><span>Mapa base</span></button>
+      <button onClick={() => setFilterPanel(current => current === "campaign" ? null : "campaign")} className={campaignFilterId ? "selected" : ""} title="Filtrar por campaña"><Filter/><span>Campaña</span></button>
+      <button onClick={() => setLayerPanelOpen(current => !current)} className={layerPanelOpen ? "selected" : ""} title="Capas y colores"><Layers3/><span>Capas</span></button>
+      <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""} title="Imágenes Sentinel-2"><Satellite/><span>Sentinel-2</span></button>
+      <button onClick={() => setFilterPanel(current => current === "monitoring" ? null : "monitoring")} className={monitoringDays ? "selected" : ""} title="Monitoreos geolocalizados"><Activity/><span>Monitoreos</span></button>
     </div>}
+    {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button></div>}
     {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
     {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days"><button className={!monitoringDays ? "active" : ""} onClick={() => setMonitoringDays(null)}>Ocultar</button>{[3,7,15,30].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days} días</button>)}</div><small>Solo se muestran monitoreos tomados dentro del lote con GPS válido.</small></div>}
-    <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>
+    {layerPanelOpen && <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>}
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"sowing")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
