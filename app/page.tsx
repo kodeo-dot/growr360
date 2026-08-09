@@ -8,7 +8,7 @@ import {
   CircleUserRound, FileText, Filter, Grid2X2, Layers3, Leaf, LoaderCircle, LogOut,
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
-  Compass, LocateFixed
+  Compass, LocateFixed, PieChart, LineChart
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -80,11 +80,21 @@ function geometry(value: Plot["geometry_json"]): GeoFeature | null {
   if (!value) return null;
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    return parsed?.geometry?.type === "Polygon" ? parsed as GeoFeature : null;
+    if (parsed?.geometry?.type !== "Polygon") return null;
+    const ring = (parsed.geometry.coordinates?.[0] ?? []).map((point: number[]) => normalizeMapCoordinate(point));
+    if (ring.length < 3 || ring.some((point: number[]) => !validMapCoordinate(point))) return null;
+    return { ...parsed, geometry: { ...parsed.geometry, coordinates: [ring] } } as GeoFeature;
   } catch {
     return null;
   }
 }
+
+function normalizeMapCoordinate(point:number[]){
+  const [first,second]=point;
+  const looksSwappedForArgentina=first>=-56&&first<=-20&&second>=-75&&second<=-50;
+  return looksSwappedForArgentina?[second,first]:[first,second];
+}
+function validMapCoordinate(point:number[]){return point.length>=2&&Number.isFinite(point[0])&&Number.isFinite(point[1])&&Math.abs(point[0])<=180&&Math.abs(point[1])<=90;}
 
 function number(value: number | string | null | undefined) {
   const parsed = Number(String(value ?? 0).replace(",", "."));
@@ -252,6 +262,18 @@ function AuthenticatedApp({ session }: { session: Session }) {
   };
   const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || session.user.email || "Usuario";
 
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      const resolved = settings.appearance === "system" ? (media.matches ? "dark" : "light") : settings.appearance;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+    };
+    applyTheme();
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, [settings.appearance]);
+
   if (loading) return <LoadingScreen text="Cargando tus campos y lotes…"/>;
 
   return <div className="app-shell">
@@ -315,6 +337,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [filterPanel, setFilterPanel] = useState<"campaign" | "monitoring" | null>(null);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
   const [baseMap, setBaseMap] = useState<"satellite" | "streets">("satellite");
+  const [mapQuery, setMapQuery] = useState("");
   const recordsRef = useRef(records);
   useEffect(() => { recordsRef.current = records; }, [records]);
   const activeCampaignId = campaigns.find(campaign => campaign.status === "active")?.id;
@@ -348,6 +371,18 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     if (!feature) return null;
     return { ...plot, feature, fieldName: relation(plot.fields)?.name ?? fields.find(field => field.id === plot.field_id)?.name ?? "Campo" };
   }).filter(Boolean) as MapPlot[], [displayPlots, fields]);
+  const mapSearchResults = useMemo(() => {
+    const query = normalizeText(mapQuery.trim());
+    if (!query) return [];
+    return mapPlots.filter(plot => normalizeText(`${plot.name} ${plot.fieldName}`).includes(query)).slice(0, 8);
+  }, [mapPlots, mapQuery]);
+
+  const focusPlot = useCallback((plot: MapPlot) => {
+    const map = mapRef.current;
+    if (!map) return;
+    fitPlots(map, [plot]);
+    setSelectedPlot(plots.find(item => item.id === plot.id) ?? plot);
+  }, [plots, setSelectedPlot]);
 
   const refreshSources = useCallback((map: MapLibreMap, drawPoints = points) => {
     const collection = {
@@ -411,7 +446,9 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addLayer({ id: "draw-line", type: "line", source: "drawing", paint: { "line-color": "#a7ff79", "line-width": 3 } });
       map.addLayer({ id: "draw-points", type: "circle", source: "vertices", paint: { "circle-radius": 6, "circle-color": "#f8fff4", "circle-stroke-color": "#1e7b45", "circle-stroke-width": 3 } });
       refreshSources(map, []);
-      if (mapPlots.length) fitPlots(map, mapPlots);
+      const initiallySelected = selectedPlot ? mapPlots.find(plot => plot.id === selectedPlot.id) : null;
+      if (initiallySelected) fitPlots(map, [initiallySelected]);
+      else if (mapPlots.length) fitPlots(map, mapPlots);
       map.on("click", "plot-fill", event => {
         if (drawing) return;
         const id = event.features?.[0]?.properties?.id;
@@ -429,6 +466,12 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   }, []);
 
   useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current); }, [refreshSources]);
+
+  useEffect(() => {
+    if (!selectedPlot || !mapRef.current?.loaded()) return;
+    const target = mapPlots.find(plot => plot.id === selectedPlot.id);
+    if (target) fitPlots(mapRef.current, [target]);
+  }, [selectedPlot?.id, mapPlots]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -513,7 +556,10 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
 
   return <div className="map-workspace">
     <div ref={mapNode} className="map-canvas"/>
-    <div className="map-search"><Search/><span>{mapPlots.length} lotes georreferenciados{campaignFilterId ? " en la campaña" : ""}</span></div>
+    <div className="map-search-wrap">
+      <div className="map-search"><Search/><input value={mapQuery} onChange={event => setMapQuery(event.target.value)} placeholder="Buscar lote o campo…" aria-label="Buscar lote o campo"/>{mapQuery && <button onClick={() => setMapQuery("")} aria-label="Limpiar búsqueda"><X/></button>}</div>
+      {mapQuery && <div className="map-search-results">{mapSearchResults.map(plot => <button key={plot.id} onClick={() => { focusPlot(plot); setMapQuery(""); }}><MapPin/><span><strong>{plot.name}</strong><small>{plot.fieldName} · {number(plot.arable_area).toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha</small></span><ChevronRight/></button>)}{!mapSearchResults.length && <p>No encontramos lotes o campos con ese nombre.</p>}</div>}
+    </div>
     <button className="map-compass" title="Orientar el norte hacia arriba" aria-label="Orientar el norte hacia arriba" onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 500 })}><Compass/></button>
     {!drawing && !draft && <div className="map-toolbar">
       <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : "Dibujar nuevo lote"}><Plus/><span>Dibujar lote</span></button>
@@ -639,20 +685,40 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
   const [crop, setCrop] = useState("");
   const [type, setType] = useState("");
   const [priority, setPriority] = useState("");
+  const [chartType, setChartType] = useState<"bar"|"line"|"pie">("bar");
   const [chartDimension, setChartDimension] = useState("crop");
   const [chartMetric, setChartMetric] = useState("worked_area");
   const filtered = records.filter(row => (!fieldId || row.field_id === fieldId) && (!plotId || row.plot_id === plotId) && (!type || row.record_type === type) && (!crop || recordCrop(row).toLowerCase() === crop.toLowerCase()));
   const filteredPlots = plots.filter(plot => (!fieldId || plot.field_id === fieldId) && (!plotId || plot.id === plotId) && (!crop || plot.cropName?.toLowerCase() === crop.toLowerCase()) && (!priority || normalizePriorityColor(plot.priority_color) === priority));
   const area = sum(filteredPlots.map(plot => number(plot.arable_area)));
   const worked = sum(filtered.map(row => number(row.worked_area)));
-  const chartRows = Object.entries(filtered.reduce<Record<string,number>>((acc,row)=>{const label=chartDimension==="field"?(relation(row.fields)?.name||"Sin campo"):chartDimension==="plot"?(relation(row.plots)?.name||"Sin lote"):chartDimension==="campaign"?(relation(row.campaigns)?.name||"Sin campaña"):chartDimension==="type"?recordType(row.record_type):chartDimension==="month"?String(row.record_date).slice(0,7):(recordCrop(row)||"Sin cultivo");const value=chartMetric==="count"?1:chartMetric==="cost"?number(recordData(row).total_cost as string|number):number(row.worked_area);acc[label]=(acc[label]??0)+value;return acc;},{})).sort((a,b)=>b[1]-a[1]);
-  const chartMax=Math.max(1,...chartRows.map(([,value])=>value));
+  const chartRows = buildChartRows(filtered, chartDimension, chartMetric);
   return <div className="page-content"><PageHead title="Reportes" text="El mismo análisis operativo de la app, con filtros combinables."/>
     <div className="report-filter premium-filter"><select value={fieldId} onChange={e => { setFieldId(e.target.value); setPlotId(""); }}><option value="">Todos los campos</option>{fields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select><select value={plotId} onChange={e => setPlotId(e.target.value)}><option value="">Todos los lotes</option>{plots.filter(plot => !fieldId || plot.field_id === fieldId).map(plot => <option key={plot.id} value={plot.id}>{plot.name}</option>)}</select><select value={crop} onChange={e => setCrop(e.target.value)}><option value="">Todos los cultivos</option>{crops.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}</select><select value={type} onChange={e => setType(e.target.value)}><option value="">Todos los registros</option>{Array.from(new Set(records.map(row => row.record_type))).map(item => <option key={item} value={item}>{recordType(item)}</option>)}</select><button onClick={() => { setFieldId(""); setPlotId(""); setCrop(""); setType(""); }}><RotateCcw/>Limpiar</button></div>
     <div className="kpi-grid"><Kpi label="Superficie analizada" value={`${area.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Superficie trabajada" value={`${worked.toLocaleString("es-AR", { maximumFractionDigits: 2 })} ha`}/><Kpi label="Lotes incluidos" value={String(filteredPlots.length)}/><Kpi label="Registros incluidos" value={String(filtered.length)}/></div>
-    <div className="chart-card analytics-chart"><div className="chart-head"><div><h3>Gráfico operativo</h3><p>Elegí la dimensión y la métrica, igual que en Análisis de Android.</p></div><BarChart3/></div><div className="chart-controls"><label>Agrupar por<select value={chartDimension} onChange={event=>setChartDimension(event.target.value)}><option value="crop">Cultivo</option><option value="plot">Lote</option><option value="field">Campo</option><option value="campaign">Campaña</option><option value="type">Tipo de registro</option><option value="month">Mes</option></select></label><label>Métrica<select value={chartMetric} onChange={event=>setChartMetric(event.target.value)}><option value="worked_area">Superficie trabajada</option><option value="count">Cantidad de registros</option><option value="cost">Costo total</option></select></label></div><div className="analytics-bars">{chartRows.map(([label,value])=><div key={label}><strong>{label}</strong><i><b style={{width:`${value/chartMax*100}%`}}/></i><span>{value.toLocaleString("es-AR",{maximumFractionDigits:2})}{chartMetric==="worked_area"?" ha":""}</span></div>)}{!chartRows.length&&<EmptyLine text="No hay datos para graficar con estos filtros."/>}</div></div>
+    <div className="chart-card analytics-chart"><div className="chart-head"><div><h3>Constructor de gráficos</h3><p>Elegí el formato, qué querés comparar y qué valor analizar.</p></div><div className="chart-type-tabs"><button className={chartType==="bar"?"active":""} onClick={()=>setChartType("bar")}><BarChart3/>Barras</button><button className={chartType==="line"?"active":""} onClick={()=>setChartType("line")}><LineChart/>Líneas</button><button className={chartType==="pie"?"active":""} onClick={()=>setChartType("pie")}><PieChart/>Torta</button></div></div><div className="chart-controls"><label>Agrupar por<select value={chartDimension} onChange={event=>setChartDimension(event.target.value)}><option value="crop">Cultivo</option><option value="plot">Lote</option><option value="field">Campo</option><option value="campaign">Campaña</option><option value="type">Tipo de registro</option><option value="month">Mes</option></select></label><label>Métrica<select value={chartMetric} onChange={event=>setChartMetric(event.target.value)}>{REPORT_METRICS.map(metric=><option value={metric.id} key={metric.id}>{metric.label}</option>)}</select></label></div><ReportChart type={chartType} rows={chartRows} metric={chartMetric}/></div>
     <div className="content-card report-summary"><div className="priority-summary-head"><div><h3>Resumen de prioridades</h3><p>Filtrá los lotes por la prioridad asignada en el grupo.</p></div><div className="priority-filter"><button className={!priority ? "active" : ""} onClick={() => setPriority("")}>Todas</button><button className={priority === "#D32F2F" ? "active" : ""} onClick={() => setPriority("#D32F2F")}><i style={{background:"#D32F2F"}}/>Alta</button><button className={priority === "#FBC02D" ? "active" : ""} onClick={() => setPriority("#FBC02D")}><i style={{background:"#FBC02D"}}/>Media</button><button className={priority === "#388E3C" ? "active" : ""} onClick={() => setPriority("#388E3C")}><i style={{background:"#388E3C"}}/>Baja</button></div></div>{fields.filter(field => !fieldId || field.id === fieldId).map(field => <section key={field.id}><h4>{field.name}</h4>{filteredPlots.filter(plot => plot.field_id === field.id).map(plot => <div key={plot.id}><i style={{ background: plot.priority_color || "#77847e" }}/><span>{plot.name}</span><small>{plot.cropName || "Sin cultivo"}</small><strong>{number(plot.arable_area).toLocaleString("es-AR")} ha</strong></div>)}</section>)}</div>
   </div>;
+}
+
+const REPORT_METRICS = [
+  {id:"worked_area",label:"Superficie trabajada"},{id:"planted_area",label:"Superficie sembrada"},{id:"harvested_area",label:"Superficie cosechada"},
+  {id:"production",label:"Producción total"},{id:"yield",label:"Rendimiento por hectárea"},{id:"water_table",label:"Profundidad de napa"},
+  {id:"cost",label:"Costo total"},{id:"cost_per_ha",label:"Costo por hectárea"},{id:"input_cost",label:"Costo de insumos"},
+  {id:"labor_cost",label:"Costo de labores"},{id:"count",label:"Cantidad de registros"},{id:"applications",label:"Cantidad de aplicaciones"},
+  {id:"income",label:"Ingresos estimados"},{id:"gross_margin",label:"Margen bruto estimado"}
+];
+const CHART_COLORS=["#137A4B","#77C943","#F2B134","#D9544D","#7656A8","#2F80C1","#19A69A","#E178A7","#8B6F47"];
+function chartLabel(row:RecordRow,dimension:string){return dimension==="field"?(relation(row.fields)?.name||"Sin campo"):dimension==="plot"?(relation(row.plots)?.name||"Sin lote"):dimension==="campaign"?(relation(row.campaigns)?.name||"Sin campaña"):dimension==="type"?recordType(row.record_type):dimension==="month"?String(row.record_date).slice(0,7):(recordCrop(row)||"Sin cultivo");}
+function chartValue(row:RecordRow,metric:string){const data=recordData(row);const area=number(row.worked_area);const totalCost=number(data.total_cost as string|number);const production=number((data.total_production??data.production) as string|number);const harvested=number(data.harvested_area as string|number);switch(metric){case"count":return 1;case"applications":return ["spraying","fertilization"].includes(row.record_type)?1:0;case"planted_area":return row.record_type==="sowing"?area:0;case"harvested_area":return harvested;case"production":return production;case"yield":return number(data.yield_per_ha as string|number)||(harvested>0?production/harvested:0);case"water_table":return number(data.water_table_depth as string|number);case"cost":return totalCost;case"cost_per_ha":return area>0?totalCost/area:0;case"input_cost":return number(data.inputs_total as string|number);case"labor_cost":return number(data.labor_cost as string|number)+number(data.application_cost as string|number)+number(data.harvest_cost as string|number);case"income":return number(data.estimated_income as string|number);case"gross_margin":return number(data.estimated_income as string|number)-totalCost;default:return area;}}
+function buildChartRows(rows:RecordRow[],dimension:string,metric:string){const grouped=new globalThis.Map<string,{total:number,count:number}>();rows.forEach(row=>{if(metric==="water_table"&&recordType(row.record_type)!=="Napa")return;const label=chartLabel(row,dimension);const current=grouped.get(label)??{total:0,count:0};current.total+=chartValue(row,metric);current.count+=1;grouped.set(label,current);});const result=Array.from(grouped,([label,value])=>[label,metric==="water_table"&&value.count?value.total/value.count:value.total] as [string,number]);return dimension==="month"?result.sort((a,b)=>a[0].localeCompare(b[0])):result.sort((a,b)=>b[1]-a[1]);}
+function metricSuffix(metric:string){if(["worked_area","planted_area","harvested_area"].includes(metric))return" ha";if(metric==="water_table")return" cm";return"";}
+function ReportChart({type,rows,metric}:{type:"bar"|"line"|"pie";rows:[string,number][];metric:string}){
+  if(!rows.length)return <EmptyLine text="No hay datos para graficar con estos filtros."/>;
+  const max=Math.max(1,...rows.map(([,value])=>Math.abs(value)));const suffix=metricSuffix(metric);const format=(value:number)=>`${value.toLocaleString("es-AR",{maximumFractionDigits:2})}${suffix}`;
+  if(type==="pie"){const positive=rows.map(row=>[row[0],Math.max(0,row[1])] as [string,number]);const total=sum(positive.map(row=>row[1]));if(total<=0)return <EmptyLine text="El gráfico de torta necesita valores mayores a cero."/>;let cursor=0;const stops=positive.map((row,index)=>{const start=cursor;cursor+=row[1]/total*100;return `${CHART_COLORS[index%CHART_COLORS.length]} ${start}% ${cursor}%`;});return <div className="pie-chart-wrap"><div className="report-donut" style={{background:`conic-gradient(${stops.join(",")})`}}><div><strong>{format(total)}</strong><small>Total</small></div></div><div className="report-legend">{positive.map(([label,value],index)=><div key={label}><i style={{background:CHART_COLORS[index%CHART_COLORS.length]}}/><span>{label}</span><strong>{format(value)}</strong></div>)}</div></div>}
+  if(type==="line"){const width=760,height=260,pad=34;const points=rows.map(([,value],index)=>`${pad+(rows.length===1?.5:index/(rows.length-1))*(width-pad*2)},${height-pad-(value/max)*(height-pad*2)}`).join(" ");return <div className="line-chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Gráfico de líneas"><line x1={pad} y1={height-pad} x2={width-pad} y2={height-pad}/><line x1={pad} y1={pad} x2={pad} y2={height-pad}/><polyline points={points}/>{points.split(" ").map((point,index)=>{const[x,y]=point.split(",");return <circle key={rows[index][0]} cx={x} cy={y} r="5"><title>{rows[index][0]}: {format(rows[index][1])}</title></circle>})}</svg><div className="line-labels">{rows.map(([label,value])=><span key={label}><b>{label}</b><small>{format(value)}</small></span>)}</div></div>}
+  return <div className="analytics-bars">{rows.map(([label,value],index)=><div key={label}><strong>{label}</strong><i><b style={{width:`${Math.abs(value)/max*100}%`,background:CHART_COLORS[index%CHART_COLORS.length]}}/></i><span>{format(value)}</span></div>)}</div>;
 }
 
 function RealSettingsView({ groupId, userId, settings, group, canManageGroup, onSaved, onGroupSaved }: { groupId: string; userId: string; settings: AppSettings; group:Group|null; canManageGroup:boolean; onSaved: (value: AppSettings) => void; onGroupSaved:()=>void }) {
