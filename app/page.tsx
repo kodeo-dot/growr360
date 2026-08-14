@@ -17,6 +17,15 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publi
 
 type View = "mapa" | "campos" | "registros" | "napas" | "campanas" | "reportes" | "equipo" | "mas" | "configuracion";
 type Group = { id: string; name: string; description?: string | null };
+type GroupDiscovery = {
+  group_id: string; name: string; description?: string | null; cuit?: string | null;
+  image_path?: string | null; creator_name?: string | null; creator_username?: string | null;
+  created_at?: string | null; is_member: boolean; has_pending_request: boolean;
+};
+type GroupJoinRequest = {
+  id: string; group_id: string; status: string; requested_role?: string | null;
+  created_at: string; groups?: Group | Group[] | null;
+};
 type PermissionOverride = { permission: string; allowed: boolean };
 type Membership = {
   group_id: string; role: string; status: string; groups: Group | Group[] | null;
@@ -249,6 +258,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
   const [pendingRecord, setPendingRecord] = useState<{ plotId: string; type: string } | null>(null);
   const [pendingForm, setPendingForm] = useState<"field"|"campaign"|"client"|"contractor"|"record"|null>(null);
+  const [groupBrowserOpen, setGroupBrowserOpen] = useState(false);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) ?? null;
@@ -366,6 +376,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         <label><small>Espacio activo</small><select value={groupId} onChange={event => switchGroup(event.target.value)}>{memberships.map(m => { const item = relation(m.groups); return item ? <option value={m.group_id} key={m.group_id}>{item.name}</option> : null; })}</select></label>
         <ChevronDown/>
       </div>
+      <button className="group-discovery-shortcut" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button>
       <div className="sidebar-footer">
         <button className={view === "configuracion" ? "active" : ""} onClick={() => { setView("configuracion"); setSidebarOpen(false); }}><Settings2/>Configuración</button>
         <div className="user-mini"><div className="avatar">{initials(name)}</div><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
@@ -377,7 +388,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
         <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
-      {!groupId ? <EmptyWorkspace/> : <>
+      {groupBrowserOpen && <GroupBrowser memberships={memberships} onClose={() => setGroupBrowserOpen(false)} onMembershipChanged={() => void loadWorkspace()}/>} 
+      {!groupId ? <EmptyWorkspace onGroups={() => setGroupBrowserOpen(true)}/> : <>
         {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields")} onCreate={() => setPendingForm("field")} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
         {view === "registros" && <RealRecordsView records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
@@ -971,11 +983,123 @@ function RealTeamView({ groupId, members, canManage, onSaved }: { groupId:string
   return <div className="page-content"><PageHead title="Equipo" text="Roles y permisos efectivos del grupo."/>{message&&<p className="form-error">{message}</p>}<div className="team-grid">{members.map(member=>{const profile=relation(member.profiles);const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(" ")||profile?.username||"Usuario";return <button className="member-card member-card-button" key={member.user_id} onClick={()=>openMember(member)}><div className="member-avatar">{initials(name)}</div><div><h3>{name}</h3><p>{roleName(member.role)}</p></div><span className="member-active"><i/>Activo</span><div className="access"><small>Cuenta</small><strong>{profile?.email??"Sin correo visible"}</strong></div><ChevronRight/></button>})}{!members.length&&<EmptyLine text="No hay miembros visibles."/>}</div>{selected&&<div className="record-detail-backdrop"><article className="permission-sheet"><header><div><span className="eyebrow">MIEMBRO DEL EQUIPO</span><h2>{[relation(selected.profiles)?.first_name,relation(selected.profiles)?.last_name].filter(Boolean).join(" ")}</h2><p>{relation(selected.profiles)?.email}</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X/></button></header><label>Rol<select disabled={!canManage||selected.role==="owner"||busy===selected.user_id} value={selected.role} onChange={e=>{void role(selected.user_id,e.target.value);setSelected({...selected,role:e.target.value})}}>{["admin","agronomist","operator","monitor","producer","member"].map(r=><option key={r} value={r}>{roleName(r)}</option>)}</select></label><section><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!canManage||selected.role==="owner"} checked={Boolean(draft[key])} onChange={e=>setDraft({...draft,[key]:e.target.checked})}/></label>)}</div></section>{canManage&&selected.role!=="owner"&&<footer><button className="danger-button" onClick={()=>void remove(selected.user_id)}>Quitar del grupo</button><button className="settings-save" onClick={()=>void savePermissions()}><Save/>Guardar permisos</button></footer>}</article></div>}</div>;
 }
 
+function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
+  memberships: Membership[]; onClose: () => void; onMembershipChanged: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GroupDiscovery[]>([]);
+  const [requests, setRequests] = useState<GroupJoinRequest[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [requestedRole, setRequestedRole] = useState("producer");
+  const [images, setImages] = useState<Record<string, string>>({});
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [workingId, setWorkingId] = useState("");
+  const [message, setMessage] = useState("");
+  const [browserError, setBrowserError] = useState("");
+
+  const loadRequests = useCallback(async () => {
+    const response = await supabase.from("group_join_requests")
+      .select("id,group_id,status,requested_role,created_at,groups(id,name,description)")
+      .order("created_at", { ascending: false });
+    if (!response.error) setRequests((response.data ?? []) as unknown as GroupJoinRequest[]);
+  }, []);
+
+  const searchGroups = useCallback(async (text: string) => {
+    setLoadingGroups(true);
+    setBrowserError("");
+    const response = await supabase.rpc("search_groups_for_join", { p_query: text.trim() });
+    if (response.error) {
+      setBrowserError(response.error.message);
+      setResults([]);
+      setLoadingGroups(false);
+      return;
+    }
+    const rows = (response.data ?? []) as GroupDiscovery[];
+    setResults(rows);
+    setSelectedId(current => rows.some(row => row.group_id === current) ? current : rows[0]?.group_id ?? "");
+    setLoadingGroups(false);
+    const paths = rows.filter(row => row.image_path && !images[row.group_id]);
+    if (paths.length) {
+      const signed = await Promise.all(paths.map(async row => {
+        const path = row.image_path as string;
+        if (/^https?:\/\//.test(path)) return [row.group_id, path] as const;
+        const result = await supabase.storage.from("group-images").createSignedUrl(path, 60 * 30);
+        return [row.group_id, result.data?.signedUrl ?? ""] as const;
+      }));
+      setImages(current => ({ ...current, ...Object.fromEntries(signed.filter(([, value]) => value)) }));
+    }
+  }, [images]);
+
+  useEffect(() => { void loadRequests(); void searchGroups(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selected = results.find(row => row.group_id === selectedId) ?? null;
+  const isMember = selected ? selected.is_member || memberships.some(item => item.group_id === selected.group_id) : false;
+  const pendingRequest = selected ? requests.find(item => item.group_id === selected.group_id && item.status === "pending") : null;
+  const isPending = Boolean(selected?.has_pending_request || pendingRequest);
+
+  const sendRequest = async () => {
+    if (!selected || isMember || isPending) return;
+    setWorkingId(selected.group_id); setBrowserError(""); setMessage("");
+    const response = await supabase.rpc("request_group_join", { p_group_id: selected.group_id, p_requested_role: requestedRole });
+    if (response.error) setBrowserError(response.error.message);
+    else {
+      setResults(current => current.map(row => row.group_id === selected.group_id ? { ...row, has_pending_request: true } : row));
+      setMessage(`Solicitud enviada a ${selected.name}.`);
+      await loadRequests();
+    }
+    setWorkingId("");
+  };
+
+  const cancelRequest = async () => {
+    if (!selected || !pendingRequest) return;
+    setWorkingId(selected.group_id); setBrowserError(""); setMessage("");
+    const response = await supabase.rpc("cancel_join_request", { p_request_id: pendingRequest.id });
+    if (response.error) setBrowserError(response.error.message);
+    else {
+      setRequests(current => current.map(item => item.id === pendingRequest.id ? { ...item, status: "cancelled" } : item));
+      setResults(current => current.map(row => row.group_id === selected.group_id ? { ...row, has_pending_request: false } : row));
+      setMessage("Solicitud cancelada.");
+    }
+    setWorkingId("");
+  };
+
+  return <div className="record-detail-backdrop group-browser-backdrop">
+    <section className="group-browser">
+      <header className="group-browser-head"><div><span className="eyebrow">ESPACIOS DE TRABAJO</span><h2>Encontrá tu grupo</h2><p>Buscá por nombre o CUIT y solicitá acceso con el rol que corresponda.</p></div><div><button className="soft-button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
+      <form className="group-search" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre de empresa, grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form>
+      {message && <div className="group-message success"><Check/>{message}</div>}
+      {browserError && <div className="group-message error"><X/>{browserError}</div>}
+      <div className="group-browser-layout">
+        <div className="group-results">
+          <div className="group-results-title"><strong>{query.trim() ? "Resultados" : "Grupos disponibles"}</strong><small>{results.length} encontrados</small></div>
+          {loadingGroups ? <div className="group-loading"><LoaderCircle className="spin"/>Buscando grupos…</div> : results.length === 0 ? <div className="group-empty"><Search/><strong>No encontramos grupos</strong><small>Probá con otro nombre o CUIT.</small></div> : results.map(row => {
+            const member = row.is_member || memberships.some(item => item.group_id === row.group_id);
+            const pending = row.has_pending_request || requests.some(item => item.group_id === row.group_id && item.status === "pending");
+            return <button type="button" key={row.group_id} className={`group-result-card ${selectedId === row.group_id ? "active" : ""}`} onClick={() => { setSelectedId(row.group_id); setMessage(""); setBrowserError(""); }}>
+              <div className="group-result-image">{images[row.group_id] ? <img src={images[row.group_id]} alt=""/> : <Tractor/>}</div>
+              <div><strong>{row.name}</strong><small>{row.description || "Grupo de trabajo agrícola"}</small><span>{member ? "Ya sos miembro" : pending ? "Solicitud pendiente" : "Disponible para solicitar acceso"}</span></div><ChevronRight/>
+            </button>;
+          })}
+        </div>
+        <aside className="group-detail">
+          {!selected ? <div className="group-empty"><Users/><strong>Seleccioná un grupo</strong><small>Vas a poder revisar sus datos antes de solicitar acceso.</small></div> : <>
+            <div className="group-detail-cover">{images[selected.group_id] ? <img src={images[selected.group_id]} alt={`Foto de ${selected.name}`}/> : <div><Tractor/></div>}<span className={isMember ? "member" : isPending ? "pending" : "open"}>{isMember ? "Sos miembro" : isPending ? "Solicitud pendiente" : "Acepta solicitudes"}</span></div>
+            <div className="group-detail-copy"><span className="eyebrow">GRUPO</span><h3>{selected.name}</h3><p>{selected.description || "Este grupo todavía no agregó una descripción."}</p></div>
+            <div className="group-facts"><div><small>Creado por</small><strong>{selected.creator_name || selected.creator_username || "Equipo administrador"}</strong></div><div><small>CUIT</small><strong>{selected.cuit || "No informado"}</strong></div></div>
+            {!isMember && !isPending && <label className="group-role-picker"><span>Quiero ingresar como</span><select value={requestedRole} onChange={event => setRequestedRole(event.target.value)}><option value="producer">Productor / Cliente</option><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operador</option></select><small>El administrador podrá ajustar tu rol y permisos al aceptarte.</small></label>}
+            {isMember ? <button className="group-primary disabled" disabled><Check/>Ya pertenecés a este grupo</button> : isPending ? <><button className="group-primary disabled" disabled><LoaderCircle/>Solicitud pendiente de aprobación</button>{pendingRequest && <button className="group-cancel" onClick={() => void cancelRequest()} disabled={workingId === selected.group_id}>Cancelar solicitud</button>}</> : <button className="group-primary" onClick={() => void sendRequest()} disabled={workingId === selected.group_id}>{workingId === selected.group_id ? <LoaderCircle className="spin"/> : <ArrowRight/>}Enviar solicitud</button>}
+          </>}
+        </aside>
+      </div>
+    </section>
+  </div>;
+}
+
 function Brand() {
   return <div className="brand"><img className="brand-logo" src="/growr360-logo.png" alt="Growr360"/><div><strong>Growr<span>360</span></strong><small>Gestión agrícola</small></div></div>;
 }
 function LoadingScreen({ text }: { text: string }) { return <div className="loading-screen"><img className="splash-logo" src="/growr360-logo.png" alt="Growr360"/><LoaderCircle className="spin"/><strong>{text}</strong></div>; }
-function EmptyWorkspace() { return <div className="empty-workspace"><Users/><h2>Tu cuenta todavía no tiene un grupo activo</h2><p>Creá un grupo o enviá una solicitud desde la aplicación móvil. Cuando te acepten, aparecerá acá automáticamente.</p></div>; }
+function EmptyWorkspace({ onGroups }: { onGroups: () => void }) { return <div className="empty-workspace"><Users/><h2>Tu cuenta todavía no tiene un grupo activo</h2><p>Buscá tu empresa o grupo de trabajo y enviá una solicitud de ingreso. Cuando te acepten, aparecerá acá automáticamente.</p><button onClick={onGroups}><Search/>Buscar grupos</button></div>; }
 function EmptyLine({ text }: { text: string }) { return <div className="empty-line">{text}</div>; }
 function PageHead({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div>{action}</div>; }
 function Stat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof MapPin }) { return <div className="stat-card"><div><Icon/></div><section><small>{label}</small><strong>{value}</strong><p>{detail}</p></section></div>; }
