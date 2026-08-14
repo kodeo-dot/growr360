@@ -9,14 +9,14 @@ import {
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
-  , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck
+  , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud, ExternalLink
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_waHR1lcMgPHyP32KlyBcEw_uAL6n6-g";
 
 type View = "mapa" | "campos" | "registros" | "napas" | "campanas" | "reportes" | "equipo" | "mas" | "configuracion";
-type Group = { id: string; name: string; description?: string | null };
+type Group = { id: string; name: string; description?: string | null; cuit?: string | null; image_path?: string | null };
 type GroupDiscovery = {
   group_id: string; name: string; description?: string | null; cuit?: string | null;
   image_path?: string | null; creator_name?: string | null; creator_username?: string | null;
@@ -321,7 +321,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
     const userId = session.user.id;
     const [profileResult, membershipResult] = await Promise.all([
       supabase.from("profiles").select("id,first_name,last_name,username,email").eq("id", userId).single(),
-      supabase.from("group_members").select("group_id,role,status,groups(id,name,description),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at")
+      supabase.from("group_members").select("group_id,role,status,groups(id,name,description,cuit,image_path),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at")
     ]);
     if (profileResult.data) setProfile(profileResult.data as Profile);
     if (membershipResult.error) {
@@ -854,23 +854,34 @@ function RealSettingsView({ groupId, userId, settings, group, canManageGroup, on
   const [message, setMessage] = useState("");
   const [groupName,setGroupName]=useState(group?.name??"");
   const [groupDescription,setGroupDescription]=useState(group?.description??"");
+  const [groupCuit,setGroupCuit]=useState(group?.cuit??"");
+  const [groupImage,setGroupImage]=useState<File|null>(null);
+  const [groupImageUrl,setGroupImageUrl]=useState("");
   useEffect(() => setDraft(settings), [settings]);
+  useEffect(()=>{setGroupName(group?.name??"");setGroupDescription(group?.description??"");setGroupCuit(group?.cuit??"");setGroupImage(null);if(!group?.image_path){setGroupImageUrl("");return}if(/^https?:\/\//.test(group.image_path)){setGroupImageUrl(group.image_path);return}supabase.storage.from("group-images").createSignedUrl(group.image_path,3600).then(({data})=>setGroupImageUrl(data?.signedUrl??""));},[group]);
+  useEffect(()=>{if(!groupImage)return;const url=URL.createObjectURL(groupImage);setGroupImageUrl(url);return()=>URL.revokeObjectURL(url)},[groupImage]);
   async function save() {
     setSaving(true); setMessage("");
     const { error } = await supabase.from("app_settings").upsert({ group_id: groupId, user_id: userId, ...draft }, { onConflict: "group_id,user_id" });
     setSaving(false);
     if (error) setMessage(error.message); else { onSaved(draft); setMessage("Configuración guardada."); }
   }
-  async function saveGroup(){setSaving(true);setMessage("");const {error}=await supabase.from("groups").update({name:groupName.trim(),description:groupDescription.trim()||null}).eq("id",groupId);setSaving(false);if(error)setMessage(error.message);else{setMessage("Grupo actualizado.");onGroupSaved();}}
+  async function saveGroup(){
+    if(groupCuit.replace(/\D/g,"").length!==11){setMessage("El CUIT debe tener 11 números.");return}
+    setSaving(true);setMessage("");let imagePath=group?.image_path??null;
+    if(groupImage){if(groupImage.size>5*1024*1024){setSaving(false);setMessage("La imagen no puede superar los 5 MB.");return}const extension=(groupImage.name.split(".").pop()||"jpg").toLowerCase();imagePath=`${groupId}/group-${Date.now()}.${extension}`;const uploaded=await supabase.storage.from("group-images").upload(imagePath,groupImage,{contentType:groupImage.type||"image/jpeg",upsert:false});if(uploaded.error){setSaving(false);setMessage(uploaded.error.message);return}}
+    const {error}=await supabase.from("groups").update({name:groupName.trim(),description:groupDescription.trim()||null,cuit:groupCuit.replace(/\D/g,""),image_path:imagePath}).eq("id",groupId);setSaving(false);if(error)setMessage(error.message);else{setGroupImage(null);setMessage("Grupo actualizado.");onGroupSaved();}
+  }
+  async function removeGroupImage(){if(!group?.image_path&&!groupImage)return;setSaving(true);setMessage("");const path=group?.image_path;const{error}=await supabase.from("groups").update({image_path:null}).eq("id",groupId);if(!error&&path&&!/^https?:\/\//.test(path))await supabase.storage.from("group-images").remove([path]);setSaving(false);if(error)setMessage(error.message);else{setGroupImage(null);setGroupImageUrl("");setMessage("Imagen del grupo eliminada.");onGroupSaved();}}
   return <div className="page-content settings-page"><PageHead title="Configuración" text="Preferencias personales para este grupo."/><div className="settings-grid">
     <section className="content-card"><div className="settings-title"><Settings2/><div><h3>Apariencia y formato</h3><p>La configuración se sincroniza con tu cuenta.</p></div></div>
       <label>Tema<select value={draft.appearance} onChange={e => setDraft({ ...draft, appearance: e.target.value })}><option value="system">Usar tema del dispositivo</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
       <label>Unidad de superficie<select value={draft.area_unit} onChange={e => setDraft({ ...draft, area_unit: e.target.value })}><option value="ha">Hectáreas (ha)</option><option value="m2">Metros cuadrados (m²)</option></select></label>
       <label>Formato de fecha<select value={draft.date_format} onChange={e => setDraft({ ...draft, date_format: e.target.value })}><option value="dd-MM-yyyy">Día-mes-año</option><option value="dd/MM/yyyy">Día/mes/año</option><option value="yyyy-MM-dd">Año-mes-día</option></select></label>
       <label className="settings-check"><input type="checkbox" checked={draft.notifications_enabled} onChange={e => setDraft({ ...draft, notifications_enabled: e.target.checked })}/><span><strong>Notificaciones</strong><small>Recibir avisos operativos del grupo.</small></span></label>
-      {message && <p className={message.includes("guardada") ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
+      {message && <p className={/(guardad|actualizad|eliminad)/i.test(message) ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
     </section>
-    {canManageGroup?<section className="content-card group-settings"><div className="settings-title"><Users/><div><h3>Configuración del grupo</h3><p>Visible para todos los integrantes.</p></div></div><label>Nombre del grupo<input value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>Descripción<textarea value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/></label><button className="settings-save" disabled={saving||!groupName.trim()} onClick={saveGroup}><Save/>Guardar grupo</button></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>}
+    {canManageGroup?<section className="content-card group-settings group-settings-premium"><div className="settings-title"><Users/><div><h3>Identidad del grupo</h3><p>Estos datos se muestran al equipo y al buscar el grupo.</p></div></div><div className="group-image-editor"><div>{groupImageUrl?<img src={groupImageUrl} alt={`Imagen de ${groupName||"grupo"}`}/>:<ImageIcon/>}</div><section><strong>Foto institucional</strong><small>JPG, PNG o WebP · máximo 5 MB. Recomendamos una imagen horizontal.</small><label className="group-upload"><UploadCloud/>Elegir imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setGroupImage(event.target.files?.[0]??null)}/></label>{(groupImageUrl||group?.image_path)&&<button className="group-remove-image" type="button" onClick={()=>void removeGroupImage()}>Quitar imagen</button>}</section></div><div className="group-settings-fields"><label>Nombre del grupo<input maxLength={120} value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>CUIT<input inputMode="numeric" maxLength={11} value={groupCuit} onChange={e=>setGroupCuit(e.target.value.replace(/\D/g,"").slice(0,11))}/></label><label className="wide">Descripción<textarea maxLength={500} placeholder="Contá brevemente quiénes son y cómo trabajan…" value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/><small>{groupDescription.length}/500</small></label></div><div className="group-settings-actions"><a href="/admin"><ShieldCheck/>Abrir panel administrativo<ExternalLink/></a><button className="settings-save" disabled={saving||!groupName.trim()||groupCuit.length!==11} onClick={()=>void saveGroup()}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar grupo</button></div></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>}
   </div></div>;
 }
 
