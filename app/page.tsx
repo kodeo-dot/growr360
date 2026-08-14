@@ -9,6 +9,7 @@ import {
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
+  , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -124,8 +125,17 @@ export default function GrowrWeb() {
 }
 
 function AuthScreen({ client }: { client: SupabaseClient }) {
+  const [screen, setScreen] = useState<"landing" | "login" | "register">("landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [accountType, setAccountType] = useState<"owner" | "employee">("owner");
+  const [defaultRole, setDefaultRole] = useState("agronomist");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -137,17 +147,74 @@ function AuthScreen({ client }: { client: SupabaseClient }) {
     setBusy(false);
   }
 
-  return <div className="auth-page">
+  async function register(event: FormEvent) {
+    event.preventDefault(); setMessage("");
+    if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim()) return setMessage("Completá todos los datos personales.");
+    if (!/^[A-Za-z0-9._-]{3,30}$/.test(username.trim())) return setMessage("El usuario debe tener entre 3 y 30 caracteres y no incluir espacios.");
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) return setMessage("La contraseña debe tener 8 caracteres, mayúscula, minúscula y número.");
+    if (password !== confirmation) return setMessage("Las contraseñas no coinciden.");
+    if (!acceptedTerms) return setMessage("Aceptá los términos y la política de privacidad para continuar.");
+    setBusy(true);
+    const selectedRole = accountType === "owner" ? "producer" : defaultRole;
+    const { data, error } = await client.auth.signUp({
+      email: email.trim(), password,
+      options: { data: { first_name: firstName.trim(), last_name: lastName.trim(), username: username.trim().toLowerCase(), default_role: selectedRole, account_type: accountType } }
+    });
+    setBusy(false);
+    if (error) return setMessage(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta." : error.message);
+    if (!data.session) { setMessage("Cuenta creada. Ya podés ingresar con tus datos."); setScreen("login"); }
+  }
+
+  if (screen === "landing") return <PublicLanding onLogin={() => setScreen("login")} onRegister={() => setScreen("register")}/>;
+
+  return <div className="auth-page auth-page-v2">
     <div className="auth-glow"/>
-    <form className="auth-card" onSubmit={login}>
+    <button className="auth-back" type="button" onClick={() => { setMessage(""); setScreen("landing"); }}><ChevronLeft/> Volver al inicio</button>
+    {screen === "login" ? <form className="auth-card auth-card-v2" onSubmit={login}>
       <Brand/>
-      <div className="auth-copy"><span>PLATAFORMA WEB</span><h1>Tu operación agrícola, en una sola vista.</h1><p>Ingresá con la misma cuenta que utilizás en la aplicación móvil.</p></div>
+      <div className="auth-copy"><span>BIENVENIDO</span><h1>Ingresá a Growr360</h1><p>Usá la misma cuenta de la aplicación móvil.</p></div>
       <label>Correo electrónico<input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
-      <label>Contraseña<input type="password" required minLength={6} value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••"/></label>
-      {message && <p className="form-error">{message}</p>}
+      <label>Contraseña<div className="password-input"><input type={showPassword ? "text" : "password"} required minLength={8} value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••"/><button type="button" aria-label="Mostrar contraseña" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>
+      {message && <p className={message.startsWith("Cuenta creada") ? "form-success" : "form-error"}>{message}</p>}
       <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <CircleUserRound/>}{busy ? "Ingresando…" : "Ingresar a Growr360"}</button>
-      <small>Las altas de usuario y recuperación de acceso continúan disponibles desde la app móvil.</small>
-    </form>
+      <p className="auth-switch">¿Todavía no tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("register"); }}>Crear cuenta</button></p>
+    </form> : <form className="auth-card auth-card-v2 register-card" onSubmit={register}>
+      <Brand/>
+      <div className="auth-copy"><span>NUEVA CUENTA</span><h1>Empezá a gestionar mejor.</h1><p>Estos datos serán los mismos que verán tus compañeros en la app.</p></div>
+      <div className="account-type-grid">
+        <button type="button" className={accountType === "owner" ? "selected" : ""} onClick={() => setAccountType("owner")}><BriefcaseBusiness/><span><strong>Dueño de empresa</strong><small>Quiero crear o dirigir un grupo.</small></span></button>
+        <button type="button" className={accountType === "employee" ? "selected" : ""} onClick={() => setAccountType("employee")}><Tractor/><span><strong>Empleado o colaborador</strong><small>Trabajo dentro de uno o más grupos.</small></span></button>
+      </div>
+      <div className="register-grid">
+        <label>Nombre<input required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Juan"/></label>
+        <label>Apellido<input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="Iglesias"/></label>
+        <label>Nombre de usuario<input required value={username} onChange={event => setUsername(event.target.value)} placeholder="juan.iglesias"/></label>
+        <label>Correo electrónico<input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
+        {accountType === "employee" && <label className="wide">Función principal<select value={defaultRole} onChange={event => setDefaultRole(event.target.value)}><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operario</option><option value="producer">Productor / Cliente</option></select></label>}
+        <label>Contraseña<div className="password-input"><input type={showPassword ? "text" : "password"} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 caracteres o más"/><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>
+        <label>Repetir contraseña<input type={showPassword ? "text" : "password"} required value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Repetí la contraseña"/></label>
+      </div>
+      <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)}/><span>Acepto los <a href="#terminos" onClick={() => setScreen("landing")}>términos y condiciones</a> y la política de privacidad.</span></label>
+      {accountType === "owner" && <div className="owner-note"><Sprout/><span><strong>Después del registro</strong> te recomendaremos crear tu grupo, aunque también podrás unirte a uno existente.</span></div>}
+      {message && <p className="form-error">{message}</p>}
+      <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <ArrowRight/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>
+      <p className="auth-switch">¿Ya tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button></p>
+    </form>}
+  </div>;
+}
+
+function PublicLanding({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) {
+  return <div className="public-site">
+    <header className="public-header"><Brand/><nav><a href="#producto">Producto</a><a href="#soluciones">Soluciones</a><a href="#nosotros">Quiénes somos</a><a href="#terminos">Legal</a></nav><div><button className="public-login" onClick={onLogin}>Ingresar</button><button className="public-cta" onClick={onRegister}>Crear cuenta <ArrowRight/></button></div></header>
+    <main>
+      <section className="public-hero"><span className="public-kicker"><Leaf/> Tecnología argentina para el campo</span><h1>Toda tu gestión agrícola,<br/><em>en un solo lugar.</em></h1><p>Campos, registros, monitoreos GPS, mapas, reportes e imágenes Sentinel-2 para tomar decisiones con información clara, desde el celular o la computadora.</p><div className="hero-actions"><button className="public-cta" onClick={onRegister}>Empezar ahora <ArrowRight/></button><a href="#producto">Conocer Growr360 <ChevronDown/></a></div><div className="hero-visual"><div className="hero-map-grid"/><div className="hero-lot lot-a">Lote Norte <small>Soja · 42,8 ha</small></div><div className="hero-lot lot-b">Lote 3 <small>Trigo · 31,2 ha</small></div><div className="hero-dashboard"><TrendingUp/><div><strong>Producción conectada</strong><small>Información actualizada para todo el equipo</small></div></div></div></section>
+      <section id="producto" className="public-section"><div className="section-intro"><span>UNA PLATAFORMA COMPLETA</span><h2>Simple para usar en el campo.<br/>Potente para administrar.</h2><p>Growr360 acompaña el trabajo diario sin obligarte a usar sistemas separados.</p></div><div className="feature-grid"><article><Map/><h3>Mapa productivo</h3><p>Dibujá lotes, importá KMZ, filtrá campañas y visualizá cultivos, prioridades y monitoreos.</p></article><article><Satellite/><h3>Inteligencia satelital</h3><p>Consultá imágenes Sentinel-2 e índices de vegetación históricos sobre el lote exacto.</p></article><article><FileText/><h3>Registros consistentes</h3><p>Centralizá labores, insumos, cosecha, análisis de suelo, napas y evidencias fotográficas.</p></article><article><BarChart3/><h3>Reportes claros</h3><p>Compará campos, lotes, campañas, cultivos, costos y contratistas con gráficos dinámicos.</p></article><article><Users/><h3>Trabajo en equipo</h3><p>Roles, permisos configurables y múltiples grupos para cada empresa o colaborador.</p></article><article><CloudSun/><h3>Trabajo offline</h3><p>Seguí cargando información sin señal y sincronizala cuando recuperes conexión.</p></article></div></section>
+      <section id="soluciones" className="audience-section"><article><Tractor/><span>PARA QUIENES PRODUCEN</span><h2>Más control, menos desorden.</h2><p>Una visión unificada de lo que sucede en cada campo y cada lote.</p></article><article><Sprout/><span>PARA QUIENES ASESORAN</span><h2>Información para decidir.</h2><p>Monitoreos, historial, imágenes e indicadores accesibles para todo el equipo.</p></article></section>
+      <section id="nosotros" className="about-section"><div><span>QUIÉNES SOMOS</span><h2>Conocimiento agronómico y desarrollo, trabajando juntos.</h2><p>Growr360 nace para resolver problemas reales del trabajo agrícola argentino: conectividad limitada, información dispersa y herramientas complejas.</p></div><div className="team-public"><article><div className="team-initial">JI</div><h3>Juan Manuel Iglesias</h3><strong>Ingeniero Agrónomo</strong><p>Visión agronómica, procesos productivos y necesidades reales del campo.</p></article><article><div className="team-initial">BI</div><h3>Benicio Iglesias Plante</h3><strong>Desarrollador de la app y web</strong><p>Producto, experiencia de usuario y desarrollo tecnológico de Growr360.</p></article></div></section>
+      <section id="terminos" className="legal-section"><div className="section-intro"><span>INFORMACIÓN LEGAL</span><h2>Transparencia y cuidado de tus datos.</h2></div><div className="legal-grid"><details open><summary><FileText/> Términos y condiciones <ChevronDown/></summary><p>Growr360 es una herramienta de apoyo para registrar, organizar y analizar información agrícola. El usuario es responsable por la exactitud de los datos ingresados y por verificar cualquier decisión productiva, técnica o económica antes de ejecutarla. El acceso debe realizarse con credenciales propias y respetando los permisos de cada grupo.</p></details><details><summary><ShieldCheck/> Privacidad y datos <ChevronDown/></summary><p>Los datos personales, productivos, geográficos y archivos se utilizan para prestar las funciones de la plataforma. No se comercializan datos privados de los usuarios. Cada organización controla el acceso de sus integrantes mediante roles y permisos.</p></details><details><summary><LockKeyhole/> Seguridad y ubicación <ChevronDown/></summary><p>Las coordenadas GPS se capturan únicamente al utilizar funciones que las requieren, como monitoreos o trazado de lotes. El usuario puede gestionar los permisos desde su dispositivo. Recomendamos proteger la cuenta y cerrar sesión en equipos compartidos.</p></details></div><small>Versión informativa vigente desde agosto de 2026. Antes del lanzamiento comercial definitivo, estos textos deberán ser revisados por asesoría legal.</small></section>
+      <section className="public-final"><img src="/growr360-logo.png" alt="Growr360"/><div><span>GESTIÓN AGRÍCOLA INTELIGENTE</span><h2>El campo no se detiene.<br/>Tu información tampoco.</h2></div><button className="public-cta" onClick={onRegister}>Crear cuenta <ArrowRight/></button></section>
+    </main>
+    <footer className="public-footer"><Brand/><p>© 2026 Growr360. Todos los derechos reservados.</p><div><a href="#terminos">Términos</a><a href="#terminos">Privacidad</a><button onClick={onLogin}>Ingresar</button></div></footer>
   </div>;
 }
 
