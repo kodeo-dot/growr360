@@ -1067,7 +1067,8 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
   const [selectedId, setSelectedId] = useState("");
   const [requestedRole, setRequestedRole] = useState("producer");
   const [images, setImages] = useState<Record<string, string>>({});
-  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [workingId, setWorkingId] = useState("");
   const [message, setMessage] = useState("");
   const [browserError, setBrowserError] = useState("");
@@ -1082,9 +1083,18 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
   }, []);
 
   const searchGroups = useCallback(async (text: string) => {
+    const normalizedQuery = text.trim();
+    if (normalizedQuery.length < 2) {
+      setResults([]);
+      setSelectedId("");
+      setHasSearched(false);
+      setBrowserError("Escribí al menos 2 caracteres del nombre o CUIT.");
+      return;
+    }
     setLoadingGroups(true);
+    setHasSearched(true);
     setBrowserError("");
-    const response = await supabase.rpc("search_groups_for_join", { p_query: text.trim() });
+    const response = await supabase.rpc("search_groups_for_join", { p_query: normalizedQuery });
     if (response.error) {
       setBrowserError(response.error.message);
       setResults([]);
@@ -1107,7 +1117,7 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
     }
   }, [images]);
 
-  useEffect(() => { void loadRequests(); void searchGroups(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadRequests(); }, [loadRequests]);
 
   const selected = results.find(row => row.group_id === selectedId) ?? null;
   const isMember = selected ? selected.is_member || memberships.some(item => item.group_id === selected.group_id) : false;
@@ -1145,15 +1155,15 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
   return <div className="record-detail-backdrop group-browser-backdrop">
     <section className="group-browser">
       <header className="group-browser-head"><div><span className="eyebrow">ESPACIOS DE TRABAJO</span><h2>Encontrá tu grupo</h2><p>Buscá por nombre o CUIT y solicitá acceso con el rol que corresponda.</p></div><div><button className="soft-button create-group-shortcut" onClick={()=>setCreating(value=>!value)}><Plus/>{creating?"Volver a buscar":"Crear grupo"}</button><button className="soft-button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
-      <form className="group-search" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre de empresa, grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form>
+      <form className="group-search" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => { setQuery(event.target.value); setResults([]); setSelectedId(""); setHasSearched(false); setBrowserError(""); }} placeholder="Nombre de empresa, grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form>
       {message && <div className="group-message success"><Check/>{message}</div>}
       {browserError && <div className="group-message error"><X/>{browserError}</div>}
       {creating&&<form className="create-group-panel" onSubmit={createGroup}><div><span className="eyebrow">NUEVO ESPACIO DE TRABAJO</span><h3>Creá el grupo de tu empresa</h3><p>Vas a quedar registrado como dueño y después podrás invitar al equipo.</p></div><label>Nombre del grupo<input required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. Establecimiento La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="11 dígitos"/></label><label className="wide">Descripción<textarea value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Contá brevemente a qué se dedica el grupo"/></label><button className="group-primary" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button></form>}
       {!creating&&<>
       <div className="group-browser-layout">
         <div className="group-results">
-          <div className="group-results-title"><strong>{query.trim() ? "Resultados" : "Grupos disponibles"}</strong><small>{results.length} encontrados</small></div>
-          {loadingGroups ? <div className="group-loading"><LoaderCircle className="spin"/>Buscando grupos…</div> : results.length === 0 ? <div className="group-empty"><Search/><strong>No encontramos grupos</strong><small>Probá con otro nombre o CUIT.</small></div> : results.map(row => {
+          <div className="group-results-title"><strong>{hasSearched ? "Resultados de búsqueda" : "Buscar un grupo"}</strong>{hasSearched && <small>{results.length} encontrados</small>}</div>
+          {loadingGroups ? <div className="group-loading"><LoaderCircle className="spin"/>Buscando grupos…</div> : !hasSearched ? <div className="group-empty"><Search/><strong>Escribí para buscar</strong><small>Los grupos solamente se muestran cuando buscás por nombre o CUIT.</small></div> : results.length === 0 ? <div className="group-empty"><Search/><strong>No encontramos grupos</strong><small>Probá con otro nombre o CUIT.</small></div> : results.map(row => {
             const member = row.is_member || memberships.some(item => item.group_id === row.group_id);
             const pending = row.has_pending_request || requests.some(item => item.group_id === row.group_id && item.status === "pending");
             return <button type="button" key={row.group_id} className={`group-result-card ${selectedId === row.group_id ? "active" : ""}`} onClick={() => { setSelectedId(row.group_id); setMessage(""); setBrowserError(""); }}>
