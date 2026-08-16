@@ -9,7 +9,8 @@ import {
   Map, MapPin, Menu, Plus, RotateCcw, Save, Search, Settings2, Sprout, Tractor,
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
-  , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud, ExternalLink
+  , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud, ExternalLink,
+  Copy, Link2, Mail, Smartphone, UserPlus
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -30,6 +31,8 @@ type PendingGroupRequest = {
   id: string; user_id: string; name: string; username?: string | null; email: string;
   phone?: string | null; requested_role?: string | null; created_at: string;
 };
+type InvitationPreview = { group_id:string;group_name:string;email:string;role:string;expires_at:string;is_valid:boolean };
+type GroupInvitation = { id:string;email:string;role:string;expires_at:string;created_at:string;status:string };
 type PermissionOverride = { permission: string; allowed: boolean };
 type Membership = {
   group_id: string; role: string; status: string; groups: Group | Group[] | null;
@@ -122,6 +125,19 @@ function number(value: number | string | null | undefined) {
 export default function GrowrWeb() {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [inviteToken, setInviteToken] = useState("");
+  const [inviteResolved, setInviteResolved] = useState(false);
+  const [resolvingInvite, setResolvingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+
+  useEffect(() => {
+    const queryToken = new URLSearchParams(window.location.search).get("invite")?.trim() ?? "";
+    const storedToken = localStorage.getItem("growr360-invite")?.trim() ?? "";
+    const token = queryToken || storedToken;
+    if (token) localStorage.setItem("growr360-invite", token);
+    setInviteToken(token);
+    setInviteResolved(true);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -132,13 +148,29 @@ export default function GrowrWeb() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (loadingSession) return <LoadingScreen text="Preparando Growr360…"/>;
-  if (!session) return <AuthScreen client={supabase}/>;
+  useEffect(() => {
+    if (!session || !inviteToken) return;
+    let active = true;
+    setResolvingInvite(true); setInviteError("");
+    supabase.rpc("accept_group_invitation", { p_token: inviteToken }).then(({ error }) => {
+      if (!active) return;
+      setResolvingInvite(false);
+      if (error) { setInviteError(error.message); return; }
+      localStorage.removeItem("growr360-invite");
+      setInviteToken("");
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+    return () => { active = false; };
+  }, [session, inviteToken]);
+
+  if (!inviteResolved || loadingSession || resolvingInvite) return <LoadingScreen text={resolvingInvite ? "Sumándote al grupo…" : "Preparando Growr360…"}/>;
+  if (inviteError && session) return <div className="invite-error-page"><Brand/><ShieldCheck/><h1>No pudimos aceptar la invitación</h1><p>{inviteError}</p><div><button onClick={() => { localStorage.removeItem("growr360-invite"); setInviteToken(""); setInviteError(""); }}>Continuar con mi cuenta</button><button onClick={() => void supabase.auth.signOut()}>Usar otra cuenta</button></div></div>;
+  if (!session) return <AuthScreen client={supabase} inviteToken={inviteToken}/>;
   return <AuthenticatedApp session={session}/>;
 }
 
-function AuthScreen({ client }: { client: SupabaseClient }) {
-  const [screen, setScreen] = useState<"landing" | "login" | "register">("landing");
+function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; inviteToken?:string }) {
+  const [screen, setScreen] = useState<"landing" | "login" | "register">(inviteToken ? "register" : "landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -151,6 +183,18 @@ function AuthScreen({ client }: { client: SupabaseClient }) {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
+  const [invitationLoading, setInvitationLoading] = useState(Boolean(inviteToken));
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    client.rpc("get_group_invitation", { p_token: inviteToken }).then(({ data, error }) => {
+      const row = (data?.[0] ?? null) as InvitationPreview | null;
+      setInvitationLoading(false);
+      if (error || !row || !row.is_valid) { setMessage(error?.message ?? "La invitación venció o ya fue utilizada."); return; }
+      setInvitation(row); setEmail(row.email); setDefaultRole(row.role); setAccountType("employee"); setScreen("register");
+    });
+  }, [client, inviteToken]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -168,10 +212,13 @@ function AuthScreen({ client }: { client: SupabaseClient }) {
     if (password !== confirmation) return setMessage("Las contraseñas no coinciden.");
     if (!acceptedTerms) return setMessage("Aceptá los términos y la política de privacidad para continuar.");
     setBusy(true);
-    const selectedRole = accountType === "owner" ? "producer" : defaultRole;
+    const selectedRole = invitation ? invitation.role : (accountType === "owner" ? "producer" : defaultRole);
+    const profileFirst=firstName.trim();
+    const profileLast=lastName.trim();
+    const profileUsername=username.trim().toLowerCase();
     const { data, error } = await client.auth.signUp({
       email: email.trim(), password,
-      options: { data: { first_name: firstName.trim(), last_name: lastName.trim(), username: username.trim().toLowerCase(), default_role: selectedRole, account_type: accountType } }
+      options: { data: { first_name: profileFirst, last_name: profileLast, username: profileUsername, default_role: selectedRole, account_type: invitation ? "employee" : accountType } }
     });
     setBusy(false);
     if (error) return setMessage(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta." : error.message);
@@ -197,22 +244,25 @@ function AuthScreen({ client }: { client: SupabaseClient }) {
     </form> : <form className="auth-card auth-card-v2 register-card" onSubmit={register}>
       <Brand/>
       <div className="auth-mode-tabs"><button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button><button type="button" className="active">Crear cuenta</button></div>
-      <div className="auth-copy"><span>NUEVA CUENTA</span><h1>Empezá a gestionar mejor.</h1><p>Estos datos serán los mismos que verán tus compañeros en la app.</p></div>
-      <div className="account-type-grid">
+      <div className="auth-copy"><span>{invitation ? "INVITACIÓN AL EQUIPO" : "NUEVA CUENTA"}</span><h1>{invitation ? `Sumate a ${invitation.group_name}.` : "Empezá a gestionar mejor."}</h1><p>{invitation ? `Tu acceso ya está preparado como ${roleName(invitation.role)}. Solo completá tus datos y creá una contraseña.` : "Estos datos serán los mismos que verán tus compañeros en la app."}</p></div>
+      {invitationLoading && <div className="invite-auth-banner"><LoaderCircle className="spin"/><span>Validando invitación…</span></div>}
+      {invitation && <div className="invite-auth-banner"><Mail/><span><strong>{invitation.email}</strong><small>{invitation.group_name} · {roleName(invitation.role)}</small></span><Check/></div>}
+      {invitation && inviteToken && <div className="invite-app-choice"><a className="open-in-app" href={`growr360://invite?invite=${encodeURIComponent(inviteToken)}`}><Smartphone/><span><strong>Abrir en la app Growr360</strong><small>Recomendado si ya la tenés instalada</small></span><ArrowRight/></a><div><span/>o continuá desde la web<span/></div></div>}
+      {!invitation && <div className="account-type-grid">
         <button type="button" className={accountType === "owner" ? "selected" : ""} onClick={() => setAccountType("owner")}><BriefcaseBusiness/><span><strong>Dueño de empresa</strong><small>Quiero crear o dirigir un grupo.</small></span></button>
         <button type="button" className={accountType === "employee" ? "selected" : ""} onClick={() => setAccountType("employee")}><Tractor/><span><strong>Empleado o colaborador</strong><small>Trabajo dentro de uno o más grupos.</small></span></button>
-      </div>
+      </div>}
       <div className="register-grid">
         <label>Nombre<input required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Martín"/></label>
         <label>Apellido<input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="González"/></label>
         <label>Nombre de usuario<input required value={username} onChange={event => setUsername(event.target.value)} placeholder="martin.gonzalez"/></label>
-        <label>Correo electrónico<input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
-        {accountType === "employee" && <label className="wide">Función principal<select value={defaultRole} onChange={event => setDefaultRole(event.target.value)}><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operario</option><option value="producer">Productor / Cliente</option></select></label>}
+        <label>Correo electrónico<input type="email" required readOnly={Boolean(invitation)} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
+        {!invitation && accountType === "employee" && <label className="wide">Función principal<select value={defaultRole} onChange={event => setDefaultRole(event.target.value)}><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operario</option><option value="producer">Productor / Cliente</option></select></label>}
         <label>Contraseña<div className="password-input"><input type={showPassword ? "text" : "password"} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 caracteres o más"/><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>
         <label>Repetir contraseña<input type={showPassword ? "text" : "password"} required value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Repetí la contraseña"/></label>
       </div>
       <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)}/><span>Acepto los <a href="#terminos" onClick={() => setScreen("landing")}>términos y condiciones</a> y la política de privacidad.</span></label>
-      {accountType === "owner" && <div className="owner-note"><Sprout/><span><strong>Después del registro</strong> te recomendaremos crear tu grupo, aunque también podrás unirte a uno existente.</span></div>}
+      {!invitation && accountType === "owner" && <div className="owner-note"><Sprout/><span><strong>Después del registro</strong> te recomendaremos crear tu grupo, aunque también podrás unirte a uno existente.</span></div>}
       {message && <p className="form-error">{message}</p>}
       <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <ArrowRight/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>
       <p className="auth-switch">¿Ya tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button></p>
@@ -400,7 +450,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "napas" && <NapaView records={records} canCreate={hasPermission("create_records")} onCreate={() => { setPendingRecord({plotId:"",type:"napa"}); setPendingForm("record"); }}/>} 
         {view === "campanas" && <CampaignsView campaigns={campaigns} records={records} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops}/>}
-        {view === "equipo" && <RealTeamView groupId={groupId} members={members} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "equipo" && <RealTeamView groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "mas" && <MoreView contractors={contractors} canManage={hasPermission("create_records")} onCreateContractor={()=>setPendingForm("contractor")} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")}/>} 
         {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} contractors={contractors} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
@@ -989,17 +1039,23 @@ const permissionCatalog=[
   ["manage_campaigns","Administrar campañas"],["export_reports","Exportar reportes"],["manage_members","Administrar equipo"]
 ] as const;
 function roleDefault(role:string,permission:string){if(role==="owner")return true;if(role==="admin")return true;if(role==="agronomist")return ["view_fields","view_records","create_records","edit_records","create_monitoring","view_satellite","view_ndvi","export_reports"].includes(permission);if(role==="operator")return ["view_fields","view_records","create_records","create_monitoring"].includes(permission);return ["view_fields","view_records"].includes(permission)}
-function RealTeamView({ groupId, members, canManage, onSaved }: { groupId:string; members: Member[]; canManage:boolean; onSaved:()=>void }) {
+function RealTeamView({ groupId, members, currentRole, canManage, onSaved }: { groupId:string; members: Member[]; currentRole:string; canManage:boolean; onSaved:()=>void }) {
   const [busy,setBusy]=useState("");const [message,setMessage]=useState("");const [selected,setSelected]=useState<Member|null>(null);const [draft,setDraft]=useState<Record<string,boolean>>({});
   const [requests,setRequests]=useState<PendingGroupRequest[]>([]);const [loadingRequests,setLoadingRequests]=useState(false);
+  const [invitations,setInvitations]=useState<GroupInvitation[]>([]);const [inviteEmail,setInviteEmail]=useState("");const [inviteRole,setInviteRole]=useState("agronomist");const [createdLink,setCreatedLink]=useState("");
   const loadRequests=useCallback(async()=>{if(!canManage){setRequests([]);return}setLoadingRequests(true);const{data,error}=await supabase.rpc("group_pending_join_requests",{p_group_id:groupId});setLoadingRequests(false);if(error)setMessage(error.message);else setRequests((data??[])as PendingGroupRequest[])},[canManage,groupId]);
-  useEffect(()=>{void loadRequests()},[loadRequests]);
+  const loadInvitations=useCallback(async()=>{if(!canManage){setInvitations([]);return}const{data,error}=await supabase.rpc("list_group_invitations",{p_group_id:groupId});if(error)setMessage(error.message);else setInvitations((data??[])as GroupInvitation[])},[canManage,groupId]);
+  useEffect(()=>{void loadRequests();void loadInvitations()},[loadRequests,loadInvitations]);
   async function role(userId:string,nextRole:string){setBusy(userId);const {error}=await supabase.rpc("change_member_role",{p_group_id:groupId,p_user_id:userId,p_role:nextRole});setBusy("");if(error)setMessage(error.message);else onSaved();}
   async function remove(userId:string){if(!confirm("¿Quitar este usuario del grupo?"))return;setBusy(userId);const {error}=await supabase.rpc("remove_group_member",{p_group_id:groupId,p_user_id:userId});setBusy("");if(error)setMessage(error.message);else{setSelected(null);onSaved();}}
   function openMember(member:Member){setSelected(member);setDraft(Object.fromEntries(permissionCatalog.map(([key])=>[key,member.member_permission_overrides?.find(item=>item.permission===key)?.allowed??roleDefault(member.role,key)])))}
   async function savePermissions(){if(!selected)return;setBusy(selected.user_id);const rows=permissionCatalog.map(([permission])=>({group_id:groupId,user_id:selected.user_id,permission,allowed:Boolean(draft[permission])}));const {error}=await supabase.from("member_permission_overrides").upsert(rows,{onConflict:"group_id,user_id,permission"});setBusy("");if(error)setMessage(error.message);else{setSelected(null);onSaved();}}
   async function resolveRequest(request:PendingGroupRequest,approve:boolean){setBusy(request.id);setMessage("");const{error}=await supabase.rpc("admin_console_resolve_request",{p_request_id:request.id,p_approve:approve,p_role:request.requested_role||"producer"});setBusy("");if(error)setMessage(error.message);else{setMessage(approve?`${request.name||request.username||"El usuario"} ya forma parte del grupo.`:"Solicitud rechazada.");await Promise.all([loadRequests(),Promise.resolve(onSaved())])}}
-  return <div className="page-content"><PageHead title="Equipo" text="Miembros, solicitudes, roles y permisos del grupo."/>{message&&<p className={/(forma parte|rechazada)/i.test(message)?"save-success":"form-error"}>{message}</p>}{canManage&&<section className="team-requests"><header><div><span className="eyebrow">SOLICITUDES DE INGRESO</span><h3>Personas esperando aprobación</h3><p>Revisá sus datos antes de incorporarlas al grupo.</p></div><span className="request-count">{loadingRequests?<LoaderCircle className="spin"/>:requests.length}</span></header>{requests.length?<div>{requests.map(request=><article key={request.id}><div className="member-avatar">{initials(request.name||request.username||"Usuario")}</div><div className="request-person"><strong>{request.name||request.username||"Usuario"}</strong><span>{request.username?`@${request.username} · `:""}{request.email}</span><small>Solicita ingresar como {roleName(request.requested_role||"producer")} · {new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",year:"numeric"}).format(new Date(request.created_at))}</small>{request.phone&&<small>{request.phone}</small>}</div><div className="request-actions"><button className="request-reject" disabled={busy===request.id} onClick={()=>void resolveRequest(request,false)}><X/>Rechazar</button><button className="request-accept" disabled={busy===request.id} onClick={()=>void resolveRequest(request,true)}>{busy===request.id?<LoaderCircle className="spin"/>:<Check/>}Aceptar</button></div></article>)}</div>:!loadingRequests&&<div className="requests-empty"><Check/><span><strong>Todo al día</strong><small>No hay solicitudes pendientes.</small></span></div>}</section>}<div className="team-section-title"><div><span className="eyebrow">INTEGRANTES ACTIVOS</span><h3>{members.length} miembro{members.length===1?"":"s"}</h3></div></div><div className="team-grid">{members.map(member=>{const profile=relation(member.profiles);const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(" ")||profile?.username||"Usuario";return <button className="member-card member-card-button" key={member.user_id} onClick={()=>openMember(member)}><div className="member-avatar">{initials(name)}</div><div><h3>{name}</h3><p>{roleName(member.role)}</p></div><span className="member-active"><i/>Activo</span><div className="access"><small>Cuenta</small><strong>{profile?.email??"Sin correo visible"}</strong></div><ChevronRight/></button>})}{!members.length&&<EmptyLine text="No hay miembros visibles."/>}</div>{selected&&<div className="record-detail-backdrop"><article className="permission-sheet"><header><div><span className="eyebrow">MIEMBRO DEL EQUIPO</span><h2>{[relation(selected.profiles)?.first_name,relation(selected.profiles)?.last_name].filter(Boolean).join(" ")}</h2><p>{relation(selected.profiles)?.email}</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X/></button></header><label>Rol<select disabled={!canManage||selected.role==="owner"||busy===selected.user_id} value={selected.role} onChange={e=>{void role(selected.user_id,e.target.value);setSelected({...selected,role:e.target.value})}}>{["admin","agronomist","operator","monitor","producer","member"].map(r=><option key={r} value={r}>{roleName(r)}</option>)}</select></label><section><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!canManage||selected.role==="owner"} checked={Boolean(draft[key])} onChange={e=>setDraft({...draft,[key]:e.target.checked})}/></label>)}</div></section>{canManage&&selected.role!=="owner"&&<footer><button className="danger-button" onClick={()=>void remove(selected.user_id)}>Quitar del grupo</button><button className="settings-save" onClick={()=>void savePermissions()}><Save/>Guardar permisos</button></footer>}</article></div>}</div>;
+  async function createInvitation(event:FormEvent){event.preventDefault();setBusy("invite");setMessage("");setCreatedLink("");const{data,error}=await supabase.rpc("create_group_invitation",{p_group_id:groupId,p_email:inviteEmail.trim(),p_role:inviteRole,p_expires_days:7});setBusy("");if(error){setMessage(error.message);return}const token=String(data?.[0]?.token??"");const link=`${window.location.origin}/?invite=${encodeURIComponent(token)}`;setCreatedLink(link);setMessage("Invitación creada. Compartí el enlace con la persona indicada.");await loadInvitations()}
+  async function copyInvitation(){if(!createdLink)return;await navigator.clipboard.writeText(createdLink);setMessage("Enlace copiado.")}
+  async function revokeInvitation(id:string){setBusy(id);const{error}=await supabase.rpc("revoke_group_invitation",{p_invitation_id:id});setBusy("");if(error)setMessage(error.message);else{setMessage("Invitación revocada.");await loadInvitations()}}
+  const invitationPanel=canManage?<section className="team-invitations"><header><div><span className="eyebrow">INVITACIÓN DIRECTA</span><h3>Sumá personas con un enlace</h3><p>Definí el correo y el rol. La persona solamente deberá crear su contraseña.</p></div><Link2/></header><form onSubmit={createInvitation}><label>Correo de la persona<input type="email" required value={inviteEmail} onChange={event=>setInviteEmail(event.target.value)} placeholder="persona@empresa.com"/></label><label>Rol asignado<select value={inviteRole} onChange={event=>setInviteRole(event.target.value)}>{currentRole==="owner"&&<option value="admin">Administrador</option>}<option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operario</option><option value="producer">Productor / Cliente</option></select></label><button className="settings-save" disabled={busy==="invite"}>{busy==="invite"?<LoaderCircle className="spin"/>:<UserPlus/>}Crear enlace</button></form>{createdLink&&<div className="created-invite-link"><Link2/><span><strong>Enlace listo</strong><small>{createdLink}</small></span><button onClick={()=>void copyInvitation()}><Copy/>Copiar</button></div>}{invitations.some(item=>item.status==="pending")&&<div className="pending-invites"><strong>Invitaciones pendientes</strong>{invitations.filter(item=>item.status==="pending").map(item=><article key={item.id}><Mail/><span><b>{item.email}</b><small>{roleName(item.role)} · vence {new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short"}).format(new Date(item.expires_at))}</small></span><button disabled={busy===item.id} onClick={()=>void revokeInvitation(item.id)}>Revocar</button></article>)}</div>}</section>:null;
+  return <div className="page-content"><PageHead title="Equipo" text="Miembros, solicitudes, roles y permisos del grupo."/>{invitationPanel}{message&&<p className={/(forma parte|rechazada|creada|copiado|revocada)/i.test(message)?"save-success":"form-error"}>{message}</p>}{canManage&&<section className="team-requests"><header><div><span className="eyebrow">SOLICITUDES DE INGRESO</span><h3>Personas esperando aprobación</h3><p>Revisá sus datos antes de incorporarlas al grupo.</p></div><span className="request-count">{loadingRequests?<LoaderCircle className="spin"/>:requests.length}</span></header>{requests.length?<div>{requests.map(request=><article key={request.id}><div className="member-avatar">{initials(request.name||request.username||"Usuario")}</div><div className="request-person"><strong>{request.name||request.username||"Usuario"}</strong><span>{request.username?`@${request.username} · `:""}{request.email}</span><small>Solicita ingresar como {roleName(request.requested_role||"producer")} · {new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",year:"numeric"}).format(new Date(request.created_at))}</small>{request.phone&&<small>{request.phone}</small>}</div><div className="request-actions"><button className="request-reject" disabled={busy===request.id} onClick={()=>void resolveRequest(request,false)}><X/>Rechazar</button><button className="request-accept" disabled={busy===request.id} onClick={()=>void resolveRequest(request,true)}>{busy===request.id?<LoaderCircle className="spin"/>:<Check/>}Aceptar</button></div></article>)}</div>:!loadingRequests&&<div className="requests-empty"><Check/><span><strong>Todo al día</strong><small>No hay solicitudes pendientes.</small></span></div>}</section>}<div className="team-section-title"><div><span className="eyebrow">INTEGRANTES ACTIVOS</span><h3>{members.length} miembro{members.length===1?"":"s"}</h3></div></div><div className="team-grid">{members.map(member=>{const profile=relation(member.profiles);const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(" ")||profile?.username||"Usuario";return <button className="member-card member-card-button" key={member.user_id} onClick={()=>openMember(member)}><div className="member-avatar">{initials(name)}</div><div><h3>{name}</h3><p>{roleName(member.role)}</p></div><span className="member-active"><i/>Activo</span><div className="access"><small>Cuenta</small><strong>{profile?.email??"Sin correo visible"}</strong></div><ChevronRight/></button>})}{!members.length&&<EmptyLine text="No hay miembros visibles."/>}</div>{selected&&<div className="record-detail-backdrop"><article className="permission-sheet"><header><div><span className="eyebrow">MIEMBRO DEL EQUIPO</span><h2>{[relation(selected.profiles)?.first_name,relation(selected.profiles)?.last_name].filter(Boolean).join(" ")}</h2><p>{relation(selected.profiles)?.email}</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X/></button></header><label>Rol<select disabled={!canManage||selected.role==="owner"||busy===selected.user_id} value={selected.role} onChange={e=>{void role(selected.user_id,e.target.value);setSelected({...selected,role:e.target.value})}}>{["admin","agronomist","operator","monitor","producer","member"].map(r=><option key={r} value={r}>{roleName(r)}</option>)}</select></label><section><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!canManage||selected.role==="owner"} checked={Boolean(draft[key])} onChange={e=>setDraft({...draft,[key]:e.target.checked})}/></label>)}</div></section>{canManage&&selected.role!=="owner"&&<footer><button className="danger-button" onClick={()=>void remove(selected.user_id)}>Quitar del grupo</button><button className="settings-save" onClick={()=>void savePermissions()}><Save/>Guardar permisos</button></footer>}</article></div>}</div>;
 }
 
 function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
@@ -1015,6 +1071,8 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
   const [workingId, setWorkingId] = useState("");
   const [message, setMessage] = useState("");
   const [browserError, setBrowserError] = useState("");
+  const [creating,setCreating]=useState(false);
+  const [newGroup,setNewGroup]=useState({name:"",description:"",cuit:""});
 
   const loadRequests = useCallback(async () => {
     const response = await supabase.from("group_join_requests")
@@ -1082,12 +1140,16 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
     setWorkingId("");
   };
 
+  const createGroup=async(event:FormEvent)=>{event.preventDefault();setWorkingId("create");setBrowserError("");const{error}=await supabase.rpc("create_group",{p_name:newGroup.name.trim(),p_description:newGroup.description.trim(),p_cuit:newGroup.cuit.replace(/\D/g,"")});setWorkingId("");if(error){setBrowserError(error.message);return}setMessage("Grupo creado. Ya podés empezar a configurarlo.");await onMembershipChanged();setCreating(false);};
+
   return <div className="record-detail-backdrop group-browser-backdrop">
     <section className="group-browser">
-      <header className="group-browser-head"><div><span className="eyebrow">ESPACIOS DE TRABAJO</span><h2>Encontrá tu grupo</h2><p>Buscá por nombre o CUIT y solicitá acceso con el rol que corresponda.</p></div><div><button className="soft-button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
+      <header className="group-browser-head"><div><span className="eyebrow">ESPACIOS DE TRABAJO</span><h2>Encontrá tu grupo</h2><p>Buscá por nombre o CUIT y solicitá acceso con el rol que corresponda.</p></div><div><button className="soft-button create-group-shortcut" onClick={()=>setCreating(value=>!value)}><Plus/>{creating?"Volver a buscar":"Crear grupo"}</button><button className="soft-button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
       <form className="group-search" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre de empresa, grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form>
       {message && <div className="group-message success"><Check/>{message}</div>}
       {browserError && <div className="group-message error"><X/>{browserError}</div>}
+      {creating&&<form className="create-group-panel" onSubmit={createGroup}><div><span className="eyebrow">NUEVO ESPACIO DE TRABAJO</span><h3>Creá el grupo de tu empresa</h3><p>Vas a quedar registrado como dueño y después podrás invitar al equipo.</p></div><label>Nombre del grupo<input required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. Establecimiento La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="11 dígitos"/></label><label className="wide">Descripción<textarea value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Contá brevemente a qué se dedica el grupo"/></label><button className="group-primary" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button></form>}
+      {!creating&&<>
       <div className="group-browser-layout">
         <div className="group-results">
           <div className="group-results-title"><strong>{query.trim() ? "Resultados" : "Grupos disponibles"}</strong><small>{results.length} encontrados</small></div>
@@ -1110,6 +1172,7 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
           </>}
         </aside>
       </div>
+      </>}
     </section>
   </div>;
 }

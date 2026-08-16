@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.gestagro360",
+      "sha256_cert_fingerprints": [
+        "D4:0C:98:AC:25:93:BA:95:C1:C8:DA:E6:31:DB:25:DA:22:2C:58:AD:71:E8:31:37:77:24:4A:B7:8D:8F:AC:6A"
+      ]
+    }
+  }
+]
