@@ -152,10 +152,12 @@ export default function GrowrWeb() {
     if (!session || !inviteToken) return;
     let active = true;
     setResolvingInvite(true); setInviteError("");
-    supabase.rpc("accept_group_invitation", { p_token: inviteToken }).then(({ error }) => {
+    supabase.rpc("accept_group_invitation", { p_token: inviteToken }).then(({ data, error }) => {
       if (!active) return;
       setResolvingInvite(false);
       if (error) { setInviteError(error.message); return; }
+      const joinedGroupId = typeof data === "string" ? data : "";
+      if (joinedGroupId) localStorage.setItem("growr360-web-group", joinedGroupId);
       localStorage.removeItem("growr360-invite");
       setInviteToken("");
       window.history.replaceState({}, "", window.location.pathname);
