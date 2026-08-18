@@ -4,3 +4,6 @@ node_modules/
 *.log
 .env*
 .vscode/
+.npm-cache/
+dist/
+tsconfig.tsbuildinfo

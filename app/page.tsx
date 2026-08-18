@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map as MapLibreMap } from "maplibre-gl";
+import JSZip from "jszip";
 import {
   Activity, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleUserRound, FileText, Filter, Grid2X2, Layers3, Leaf, LoaderCircle, LogOut,
@@ -10,13 +11,13 @@ import {
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
   , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud, ExternalLink,
-  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2
+  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, FileUp, History
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_waHR1lcMgPHyP32KlyBcEw_uAL6n6-g";
 
-type View = "mapa" | "campos" | "registros" | "napas" | "campanas" | "reportes" | "equipo" | "mas" | "configuracion";
+type View = "mapa" | "campos" | "registros" | "napas" | "campanas" | "reportes" | "equipo" | "mas" | "configuracion" | "grupo";
 type Group = { id: string; name: string; description?: string | null; cuit?: string | null; image_path?: string | null };
 type GroupDiscovery = {
   group_id: string; name: string; description?: string | null; cuit?: string | null;
@@ -127,6 +128,25 @@ function normalizeMapCoordinate(point:number[]){
   const looksSwappedForArgentina=first>=-56&&first<=-20&&second>=-75&&second<=-50;
   return looksSwappedForArgentina?[second,first]:[first,second];
 }
+function kmlFeatures(text:string):GeoFeature[]{
+  const document=new DOMParser().parseFromString(text,"application/xml");
+  if(document.querySelector("parsererror"))throw new Error("El archivo KML no tiene un formato válido.");
+  return Array.from(document.querySelectorAll("Placemark")).flatMap((placemark,index)=>{
+    const coordinates=placemark.querySelector("Polygon coordinates")?.textContent?.trim();
+    if(!coordinates)return [];
+    const ring=coordinates.split(/\s+/).map(value=>value.split(",").slice(0,2).map(Number)).filter(point=>validMapCoordinate(point));
+    if(ring.length>1&&ring[0][0]===ring.at(-1)?.[0]&&ring[0][1]===ring.at(-1)?.[1])ring.pop();
+    if(ring.length<3)return [];
+    const calculated=calculateGeometry(ring);
+    return [{...calculated,properties:{...calculated.properties,imported_name:placemark.querySelector("name")?.textContent?.trim()||`Lote ${index+1}`}}];
+  });
+}
+
+function plotsKml(plots:MapPlot[]){
+  const placemarks=plots.map(plot=>{const ring=plot.feature.geometry.coordinates[0];const closed=[...ring,ring[0]].map(point=>`${point[0]},${point[1]},0`).join(" ");return `<Placemark><name>${escapeXml(plot.name)}</name><description>${escapeXml(plot.fieldName)}</description><Polygon><outerBoundaryIs><LinearRing><coordinates>${closed}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`}).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Lotes Growr360</name>${placemarks}</Document></kml>`;
+}
+function escapeXml(value:string){return value.replace(/[<>&"']/g,char=>({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&apos;"}[char]??char));}
 function validMapCoordinate(point:number[]){return point.length>=2&&Number.isFinite(point[0])&&Number.isFinite(point[1])&&Math.abs(point[0])<=180&&Math.abs(point[1])<=90;}
 
 function number(value: number | string | null | undefined) {
@@ -446,13 +466,14 @@ function AuthenticatedApp({ session }: { session: Session }) {
       </div>
       <button className="group-discovery-shortcut" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button>
       <div className="sidebar-footer">
+        {(activeMembership?.role === "owner" || activeMembership?.role === "admin")&&<button className={view === "grupo" ? "active" : ""} onClick={() => { setView("grupo"); setSidebarOpen(false); }}><Users/>Configuración del grupo</button>}
         <button className={view === "configuracion" ? "active" : ""} onClick={() => { setView("configuracion"); setSidebarOpen(false); }}><Settings2/>Configuración</button>
         <div className="user-mini"><div className="avatar">{initials(name)}</div><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
       </div>
     </aside>
     <main>
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{view === "configuracion" ? "Configuración" : nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : subtitle(view)}</p></div></div>
+        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{view === "configuracion" ? "Configuración" : view === "grupo" ? "Configuración del grupo" : nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
         <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
@@ -465,8 +486,9 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "campanas" && <CampaignsView campaigns={campaigns} records={records} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops}/>}
         {view === "equipo" && <RealTeamView groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSaved={() => void loadGroupData(groupId, true)}/>}
-        {view === "mas" && <MoreView contractors={contractors} canManage={hasPermission("create_records")} onCreateContractor={()=>setPendingForm("contractor")} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")}/>} 
-        {view === "configuracion" && <RealSettingsView groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
+        {view === "mas" && <MoreView contractors={contractors} canManage={hasPermission("create_records")} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onCreateContractor={()=>setPendingForm("contractor")} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")} onOpenGroupSettings={()=>setView("grupo")}/>} 
+        {view === "configuracion" && <RealSettingsView mode="personal" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
+        {view === "grupo" && <RealSettingsView mode="group" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} contractors={contractors} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
       </>}
     </main>
@@ -485,6 +507,9 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [drawing, setDrawing] = useState(false);
   const [points, setPoints] = useState<number[][]>([]);
   const [draft, setDraft] = useState<GeoFeature | null>(null);
+  const [importQueue,setImportQueue]=useState<GeoFeature[]>([]);
+  const [recentOpen,setRecentOpen]=useState(false);
+  const kmzInput=useRef<HTMLInputElement>(null);
   const [satelliteOpen, setSatelliteOpen] = useState(false);
   const [satelliteScenes, setSatelliteScenes] = useState<SatelliteScene[]>([]);
   const [satelliteScene, setSatelliteScene] = useState<SatelliteScene | null>(null);
@@ -667,6 +692,30 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     const calculated = calculateGeometry(points);
     setDraft(calculated); setDrawing(false);
   }
+  async function importKmz(file:File){
+    setSatelliteError("");
+    try{
+      let kml="";
+      if(file.name.toLowerCase().endsWith(".kmz")){
+        const zip=await JSZip.loadAsync(file);
+        const entry=Object.values(zip.files).find(item=>item.name.toLowerCase().endsWith(".kml"));
+        if(!entry)throw new Error("El KMZ no contiene ningún archivo KML.");
+        kml=await entry.async("text");
+      }else kml=await file.text();
+      const features=kmlFeatures(kml);
+      if(!features.length)throw new Error("No encontramos polígonos de lotes en el archivo.");
+      setSelectedPlot(null);setImportQueue(features.slice(1));setDraft(features[0]);setDrawing(false);
+    }catch(reason){setSatelliteError(reason instanceof Error?reason.message:"No se pudo importar el archivo.");}
+    if(kmzInput.current)kmzInput.current.value="";
+  }
+  async function exportKmz(){
+    const targets=selectedPlot?mapPlots.filter(plot=>plot.id===selectedPlot.id):mapPlots;
+    if(!targets.length){setSatelliteError("No hay lotes trazados para exportar.");return;}
+    const zip=new JSZip();zip.file("lotes-growr360.kml",plotsKml(targets));
+    const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
+    const url=URL.createObjectURL(blob);const anchor=document.createElement("a");anchor.href=url;anchor.download=selectedPlot?`${selectedPlot.name}.kmz`:"lotes-growr360.kmz";anchor.click();URL.revokeObjectURL(url);
+  }
+  function advanceImported(){const [next,...rest]=importQueue;setImportQueue(rest);setDraft(next??null);if(!next)onSaved();}
   async function loadSatelliteScenes(plotId: string) {
     const target = mapPlots.find(plot => plot.id === plotId);
     if (!target || !geometry(target.geometry_json)) { setSatelliteError("Seleccioná un lote trazado para consultar Sentinel-2."); setSatelliteOpen(true); return; }
@@ -733,12 +782,12 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""} title="Imágenes Sentinel-2"><Satellite/><span>Sentinel-2</span></button>
       <button onClick={() => setFilterPanel(current => current === "monitoring" ? null : "monitoring")} className={monitoringDays ? "selected" : ""} title="Monitoreos geolocalizados"><Activity/><span>Monitoreos</span></button>
     </div>}
-    {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button></div>}
+    {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={()=>setRecentOpen(true)} title="Últimos registros"><History/></button><button onClick={()=>kmzInput.current?.click()} disabled={!canManageLots} title="Importar KML o KMZ"><FileUp/></button><button onClick={()=>void exportKmz()} title={selectedPlot?"Exportar lote en KMZ":"Exportar todos los lotes en KMZ"}><Download/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button><input ref={kmzInput} hidden type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" onChange={event=>event.target.files?.[0]&&void importKmz(event.target.files[0])}/></div>}
     {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
     {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days"><button className={!monitoringDays ? "active" : ""} onClick={() => setMonitoringDays(null)}>Ocultar</button>{[3,7,15,30].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days} días</button>)}</div><small>Solo se muestran monitoreos tomados dentro del lote con GPS válido.</small></div>}
     {layerPanelOpen && <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>}
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
-    {draft && <PlotForm feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={cancelDrawing} onSaved={() => { cancelDrawing(); onSaved(); }}/>}
+    {draft && <PlotForm key={`${draft.properties?.imported_name??"drawn"}-${draft.geometry.coordinates[0][0]?.join(",")}`} feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={()=>{if(importQueue.length)advanceImported();else cancelDrawing();}} onSaved={()=>{if(importQueue.length)advanceImported();else{cancelDrawing();onSaved();}}}/>} 
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"sowing")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
     {satelliteOpen && <aside className="satellite-panel real-satellite"><div className="sat-top"><div><span className="eyebrow">COPERNICUS · SENTINEL-2</span><strong>Imágenes satelitales</strong></div><button onClick={() => setSatelliteOpen(false)}><X/></button></div>
       <label className="sat-plot-picker">Lote<select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
@@ -746,6 +795,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
       {!!satelliteScenes.length && <><div className="sat-opacity"><span>Opacidad <b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history"><strong>Historial · {satelliteIndexName(satelliteIndex)}</strong><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></button>)}</div></div></>}
     </aside>}
+    {recentOpen&&!drawing&&!draft&&<aside className="lot-panel operational-panel recent-map-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">ACTIVIDAD DEL EQUIPO</span><h2>Últimos registros</h2><h3>Más recientes primero</h3></div><button className="icon-button" onClick={()=>setRecentOpen(false)}><X/></button></div><PlotActivitySection title="Actividad reciente" icon={History} rows={[...records].filter(row=>row.record_type!=="monitoring").sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date))).slice(0,6)} onOpen={setDetailRecord}/></aside>}
     {detailRecord && <RecordDetail record={detailRecord} onClose={() => setDetailRecord(null)}/>}
     {!fields.length && <div className="map-empty-hint">Primero necesitás crear un campo desde la aplicación móvil para poder asociar el lote.</div>}
     {fields.length > 0 && !canManageLots && <div className="map-permission-hint">Podés consultar el mapa, pero tu función no tiene el permiso “Administrar lotes”. Un dueño o administrador puede habilitarlo desde Miembros y grupo.</div>}
@@ -757,7 +807,7 @@ function PlotForm({ feature, fields, groupId, userId, onCancel, onSaved }: {
 }) {
   const initialArea = Number(feature.properties?.area_ha ?? 0);
   const [fieldId, setFieldId] = useState(fields[0]?.id ?? "");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(String(feature.properties?.imported_name ?? ""));
   const [area, setArea] = useState(initialArea.toFixed(2));
   const [allowEdits, setAllowEdits] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -928,12 +978,12 @@ function ContractorSummary({contractor,records}:{contractor:string;records:Recor
   return <section className="content-card contractor-summary"><div className="contractor-summary-head"><div><span className="eyebrow">RESUMEN DEL CONTRATISTA</span><h3>{contractor}</h3><p>Trabajos incluidos según los filtros activos.</p></div><Tractor/></div><div className="contractor-kpis"><div><small>Trabajos</small><strong>{records.length}</strong></div><div><small>Superficie acumulada</small><strong>{totalArea.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div><div><small>Costo registrado</small><strong>{totalCost.toLocaleString("es-AR",{maximumFractionDigits:2})}</strong></div></div><div className="contractor-types">{types.map(item=><div key={item.type}><span>{recordType(item.type)}</span><small>{item.count} trabajo{item.count===1?"":"s"}</small><strong>{item.area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div>)}</div></section>;
 }
 
-function MoreView({contractors,canManage,onCreateContractor,onOpenTeam,onOpenSettings}:{contractors:Contractor[];canManage:boolean;onCreateContractor:()=>void;onOpenTeam:()=>void;onOpenSettings:()=>void}){
+function MoreView({contractors,canManage,canManageGroup,onCreateContractor,onOpenTeam,onOpenSettings,onOpenGroupSettings}:{contractors:Contractor[];canManage:boolean;canManageGroup:boolean;onCreateContractor:()=>void;onOpenTeam:()=>void;onOpenSettings:()=>void;onOpenGroupSettings:()=>void}){
   const [open,setOpen]=useState<Contractor|null>(null);
-  return <div className="page-content"><PageHead title="Más" text="Catálogos, equipo y configuración del grupo."/><div className="more-grid"><section className="content-card contractor-directory"><header><div className="settings-title"><ContactRound/><div><h3>Contratistas</h3><p>Una sola ficha por contratista para mantener reportes consistentes.</p></div></div>{canManage&&<button className="primary-action" onClick={onCreateContractor}><Plus/>Nuevo contratista</button>}</header><div className="contractor-directory-list">{contractors.map(contractor=><button key={contractor.id} onClick={()=>setOpen(contractor)}><div className="avatar">{initials(contractor.name)}</div><div><strong>{contractor.name}</strong><small>{contractor.document?`CUIT/DNI ${contractor.document}`:"Sin documento"}{contractor.phone?` · ${contractor.phone}`:""}</small></div><ChevronRight/></button>)}{!contractors.length&&<EmptyLine text="Todavía no hay contratistas cargados."/>}</div></section><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button><button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Configuración</strong><small>Preferencias y datos del grupo</small></div><ChevronRight/></button></div>{open&&<div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><div><span className="eyebrow">CONTRATISTA</span><h2>{open.name}</h2></div><button className="icon-button" onClick={()=>setOpen(null)}><X/></button></header><div className="contractor-contact-grid"><div><Phone/><small>Teléfono</small><strong>{open.phone||"Sin datos"}</strong></div><div><CreditCard/><small>CUIT o DNI</small><strong>{open.document||"Sin datos"}</strong></div><div><Home/><small>Dirección</small><strong>{open.address||"Sin datos"}</strong></div></div>{open.notes&&<section><h3>Nota</h3><p>{open.notes}</p></section>}</article></div>}</div>
+  return <div className="page-content"><PageHead title="Más" text="Catálogos, equipo y preferencias."/><div className="more-grid"><section className="content-card contractor-directory"><header><div className="settings-title"><ContactRound/><div><h3>Contratistas</h3><p>Una sola ficha por contratista para mantener reportes consistentes.</p></div></div>{canManage&&<button className="primary-action" onClick={onCreateContractor}><Plus/>Nuevo contratista</button>}</header><div className="contractor-directory-list">{contractors.map(contractor=><button key={contractor.id} onClick={()=>setOpen(contractor)}><div className="avatar">{initials(contractor.name)}</div><div><strong>{contractor.name}</strong><small>{contractor.document?`CUIT/DNI ${contractor.document}`:"Sin documento"}{contractor.phone?` · ${contractor.phone}`:""}</small></div><ChevronRight/></button>)}{!contractors.length&&<EmptyLine text="Todavía no hay contratistas cargados."/>}</div></section><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button>{canManageGroup&&<button className="more-option" onClick={onOpenGroupSettings}><ShieldCheck/><div><strong>Configuración del grupo</strong><small>Identidad, foto y datos institucionales</small></div><ChevronRight/></button>}<button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Ajustes personales</strong><small>Tema, unidades, fechas y avisos</small></div><ChevronRight/></button></div>{open&&<div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><div><span className="eyebrow">CONTRATISTA</span><h2>{open.name}</h2></div><button className="icon-button" onClick={()=>setOpen(null)}><X/></button></header><div className="contractor-contact-grid"><div><Phone/><small>Teléfono</small><strong>{open.phone||"Sin datos"}</strong></div><div><CreditCard/><small>CUIT o DNI</small><strong>{open.document||"Sin datos"}</strong></div><div><Home/><small>Dirección</small><strong>{open.address||"Sin datos"}</strong></div></div>{open.notes&&<section><h3>Nota</h3><p>{open.notes}</p></section>}</article></div>}</div>
 }
 
-function RealSettingsView({ groupId, userId, settings, group, canManageGroup, onSaved, onGroupSaved }: { groupId: string; userId: string; settings: AppSettings; group:Group|null; canManageGroup:boolean; onSaved: (value: AppSettings) => void; onGroupSaved:()=>void }) {
+function RealSettingsView({ mode, groupId, userId, settings, group, canManageGroup, onSaved, onGroupSaved }: { mode:"personal"|"group";groupId: string; userId: string; settings: AppSettings; group:Group|null; canManageGroup:boolean; onSaved: (value: AppSettings) => void; onGroupSaved:()=>void }) {
   const [draft, setDraft] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -958,15 +1008,15 @@ function RealSettingsView({ groupId, userId, settings, group, canManageGroup, on
     const {error}=await supabase.from("groups").update({name:groupName.trim(),description:groupDescription.trim()||null,cuit:groupCuit.replace(/\D/g,""),image_path:imagePath}).eq("id",groupId);setSaving(false);if(error)setMessage(error.message);else{setGroupImage(null);setMessage("Grupo actualizado.");onGroupSaved();}
   }
   async function removeGroupImage(){if(!group?.image_path&&!groupImage)return;setSaving(true);setMessage("");const path=group?.image_path;const{error}=await supabase.from("groups").update({image_path:null}).eq("id",groupId);if(!error&&path&&!/^https?:\/\//.test(path))await supabase.storage.from("group-images").remove([path]);setSaving(false);if(error)setMessage(error.message);else{setGroupImage(null);setGroupImageUrl("");setMessage("Imagen del grupo eliminada.");onGroupSaved();}}
-  return <div className="page-content settings-page"><PageHead title="Configuración" text="Preferencias personales para este grupo."/><div className="settings-grid">
-    <section className="content-card"><div className="settings-title"><Settings2/><div><h3>Apariencia y formato</h3><p>La configuración se sincroniza con tu cuenta.</p></div></div>
+  return <div className="page-content settings-page"><PageHead title={mode==="group"?"Configuración del grupo":"Ajustes personales"} text={mode==="group"?"Identidad y datos institucionales separados de tus preferencias.":"Apariencia, formatos y avisos de tu cuenta."}/><div className="settings-grid">
+    {mode==="personal"&&<section className="content-card"><div className="settings-title"><Settings2/><div><h3>Apariencia y formato</h3><p>La configuración se sincroniza con tu cuenta.</p></div></div>
       <label>Tema<select value={draft.appearance} onChange={e => setDraft({ ...draft, appearance: e.target.value })}><option value="system">Usar tema del dispositivo</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
       <label>Unidad de superficie<select value={draft.area_unit} onChange={e => setDraft({ ...draft, area_unit: e.target.value })}><option value="ha">Hectáreas (ha)</option><option value="m2">Metros cuadrados (m²)</option></select></label>
       <label>Formato de fecha<select value={draft.date_format} onChange={e => setDraft({ ...draft, date_format: e.target.value })}><option value="dd-MM-yyyy">Día-mes-año</option><option value="dd/MM/yyyy">Día/mes/año</option><option value="yyyy-MM-dd">Año-mes-día</option></select></label>
       <label className="settings-check"><input type="checkbox" checked={draft.notifications_enabled} onChange={e => setDraft({ ...draft, notifications_enabled: e.target.checked })}/><span><strong>Notificaciones</strong><small>Recibir avisos operativos del grupo.</small></span></label>
       {message && <p className={/(guardad|actualizad|eliminad)/i.test(message) ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
-    </section>
-    {canManageGroup?<section className="content-card group-settings group-settings-premium"><div className="settings-title"><Users/><div><h3>Identidad del grupo</h3><p>Estos datos se muestran al equipo y al buscar el grupo.</p></div></div><div className="group-image-editor"><div>{groupImageUrl?<img src={groupImageUrl} alt={`Imagen de ${groupName||"grupo"}`}/>:<ImageIcon/>}</div><section><strong>Foto institucional</strong><small>JPG, PNG o WebP · máximo 5 MB. Recomendamos una imagen horizontal.</small><label className="group-upload"><UploadCloud/>Elegir imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setGroupImage(event.target.files?.[0]??null)}/></label>{(groupImageUrl||group?.image_path)&&<button className="group-remove-image" type="button" onClick={()=>void removeGroupImage()}>Quitar imagen</button>}</section></div><div className="group-settings-fields"><label>Nombre del grupo<input maxLength={120} value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>CUIT<input inputMode="numeric" maxLength={11} value={groupCuit} onChange={e=>setGroupCuit(e.target.value.replace(/\D/g,"").slice(0,11))}/></label><label className="wide">Descripción<textarea maxLength={500} placeholder="Contá brevemente quiénes son y cómo trabajan…" value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/><small>{groupDescription.length}/500</small></label></div><div className="group-settings-actions"><a href="/admin"><ShieldCheck/>Abrir panel administrativo<ExternalLink/></a><button className="settings-save" disabled={saving||!groupName.trim()||groupCuit.length!==11} onClick={()=>void saveGroup()}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar grupo</button></div></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>}
+    </section>}
+    {mode==="group"&&(canManageGroup?<section className="content-card group-settings group-settings-premium"><div className="settings-title"><Users/><div><h3>Identidad del grupo</h3><p>Estos datos se muestran al equipo y al buscar el grupo.</p></div></div><div className="group-image-editor"><div>{groupImageUrl?<img src={groupImageUrl} alt={`Imagen de ${groupName||"grupo"}`}/>:<ImageIcon/>}</div><section><strong>Foto institucional</strong><small>JPG, PNG o WebP · máximo 5 MB. Recomendamos una imagen horizontal.</small><label className="group-upload"><UploadCloud/>Elegir imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setGroupImage(event.target.files?.[0]??null)}/></label>{(groupImageUrl||group?.image_path)&&<button className="group-remove-image" type="button" onClick={()=>void removeGroupImage()}>Quitar imagen</button>}</section></div><div className="group-settings-fields"><label>Nombre del grupo<input maxLength={120} value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>CUIT<input inputMode="numeric" maxLength={11} value={groupCuit} onChange={e=>setGroupCuit(e.target.value.replace(/\D/g,"").slice(0,11))}/></label><label className="wide">Descripción<textarea maxLength={500} placeholder="Contá brevemente quiénes son y cómo trabajan…" value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/><small>{groupDescription.length}/500</small></label></div><div className="group-settings-actions"><a href="/admin"><ShieldCheck/>Abrir panel administrativo<ExternalLink/></a><button className="settings-save" disabled={saving||!groupName.trim()||groupCuit.length!==11} onClick={()=>void saveGroup()}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar grupo</button></div></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>)}
   </div></div>;
 }
 
