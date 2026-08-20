@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({ collections: ["sentinel-2-l2a"], intersects: geometry, datetime: `${from.toISOString()}/${to.toISOString()}`, limit: 200 }),
       cache: "no-store"
     });
-    if (!response.ok) throw new Error(`Copernicus no respondió correctamente (${response.status}).`);
+    if (!response.ok) throw new Error(`Planet Insights no respondió correctamente (${response.status}).`);
     const data = await response.json() as { features?: Array<{ id: string; properties?: Record<string, unknown> }> };
     const byDay = new Map<string, { id: string; date: string; cloud: number; satellite: string }>();
     for (const item of data.features ?? []) {

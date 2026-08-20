@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       }),
       cache: "no-store"
     });
-    if (!response.ok) throw new Error(`No se pudo procesar esta fecha de Sentinel-2 (${response.status}). ${(await response.text()).slice(0, 300)}`);
+    if (!response.ok) throw new Error(`Planet Insights no pudo procesar esta fecha (${response.status}). ${(await response.text()).slice(0, 300)}`);
     return new Response(await response.arrayBuffer(), { headers: { "content-type": "image/png", "cache-control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No se pudo generar la imagen." }, { status: 500 });
