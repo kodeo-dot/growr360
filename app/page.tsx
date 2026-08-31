@@ -484,7 +484,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "registros" && <RealRecordsView records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
         {view === "napas" && <NapaView records={records} canCreate={hasPermission("create_records")} onCreate={() => { setPendingRecord({plotId:"",type:"napa"}); setPendingForm("record"); }}/>} 
         {view === "campanas" && <CampaignsView campaigns={campaigns} records={records} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
-        {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops}/>}
+        {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops} campaigns={campaigns}/>}
         {view === "equipo" && <RealTeamView section="members" groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "solicitudes" && <RealTeamView section="requests" groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "invitaciones" && <RealTeamView section="invitations" groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
@@ -861,8 +861,35 @@ function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => v
   const details = recordData(record);
   const actualType=effectiveRecordType(record);
   const observations=String(details.observations??"").trim();
-  const visible=visibleDetails(details).filter(([key])=>key!=="observations");
-  return <div className="record-detail-backdrop"><article className="record-detail-sheet"><header><button className="page-back-button" onClick={onClose}><ChevronLeft/>Volver</button><div><span className="eyebrow">{actualType === "monitoring" ? "MONITOREO" : actualType === "napa" ? "MEDICIÓN DE NAPA" : "REGISTRO"}</span><h2>{recordType(actualType)}{recordCrop(record)&&actualType!=="napa" ? ` · ${recordCrop(record)}` : ""}</h2><p>{relation(record.fields)?.name || "Campo"} · {relation(record.plots)?.name || "Sin lote"}</p></div></header><div className="detail-hero"><CalendarDays/><div><small>Fecha</small><strong>{formatDate(record.record_date)}</strong></div><div><small>Campaña</small><strong>{relation(record.campaigns)?.name || "Sin campaña"}</strong></div>{actualType!=="napa"&&<div><small>Superficie</small><strong>{number(record.worked_area).toLocaleString("es-AR")} ha</strong></div>}</div><section className="record-data-section"><div className="detail-section-title"><FileText/><div><h3>Información registrada</h3><p>Datos técnicos y operativos</p></div></div><div className="detail-grid">{visible.map(([key,value]) => <div key={key} className={key==="monitoring_priority"?"importance-detail-card":""}><small>{detailLabel(key)}</small><strong>{formatDetailValue(key,value)}</strong></div>)}{!visible.length && <EmptyLine text="Este registro no tiene datos adicionales."/>}</div></section>{observations&&<ObservationBlock value={observations}/>} {(record.contractor||record.machinery_text)&&<section><h3>Ejecución</h3><div className="detail-grid">{record.contractor&&<div><small>Contratista</small><strong>{record.contractor}</strong></div>}{record.machinery_text&&<div><small>Maquinaria</small><strong>{record.machinery_text}</strong></div>}</div></section>}<RecordAttachments recordId={record.id}/></article></div>;
+  const entries=visibleDetails(details).filter(([key])=>key!=="observations"&&!/^input_\d+_/.test(key)&&key!=="input_count");
+  const inputs=recordInputDetails(details,number(record.worked_area));
+  const costs=entries.filter(([key])=>/(cost|price|income|margin|inputs_total)/.test(key));
+  const gps=entries.filter(([key])=>key.startsWith("gps_"));
+  const monitoring=entries.filter(([key])=>/(weed|insect|disease|monitoring_priority|phenological|plant_count)/.test(key));
+  const samples=entries.filter(([key])=>key.startsWith("soil_sample_"));
+  const excluded=new Set([...costs,...gps,...monitoring,...samples].map(([key])=>key));
+  const technical=entries.filter(([key])=>!excluded.has(key));
+  return <div className="record-detail-backdrop"><article className="record-detail-sheet visual-record-detail"><header><button className="page-back-button" onClick={onClose}><ChevronLeft/>Volver</button><div><span className="eyebrow">{actualType === "monitoring" ? "MONITOREO" : actualType === "napa" ? "MEDICIÓN DE NAPA" : "REGISTRO"}</span><h2>{recordType(actualType)}{recordCrop(record)&&actualType!=="napa" ? ` · ${recordCrop(record)}` : ""}</h2><p>{relation(record.fields)?.name || "Campo"} · {relation(record.plots)?.name || "Sin lote"}</p></div></header>
+    <div className="record-overview"><span className="record-overview-icon"><Leaf/></span><div><small>FECHA</small><strong>{formatDate(record.record_date)}</strong></div><div><small>CAMPAÑA</small><strong>{relation(record.campaigns)?.name || "Sin campaña"}</strong></div>{actualType!=="napa"&&<div><small>SUPERFICIE</small><strong>{number(record.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div>}<div><small>UBICACIÓN</small><strong>{relation(record.plots)?.name||"Sin lote"}</strong></div></div>
+    {(record.contractor||record.machinery_text)&&<section className="record-execution-strip"><div className="detail-section-title"><Tractor/><div><h3>Ejecución</h3><p>Quién y con qué se realizó</p></div></div><div>{record.contractor&&<span><small>Contratista</small><strong>{record.contractor}</strong></span>}{record.machinery_text&&<span><small>Maquinaria</small><strong>{record.machinery_text}</strong></span>}</div></section>}
+    {inputs.length>0&&<section className="record-inputs-section"><div className="detail-section-title"><Leaf/><div><h3>Insumos aplicados</h3><p>{inputs.length} producto{inputs.length===1?"":"s"}, ordenados para comparar rápido</p></div></div><div className="record-input-cards">{inputs.map((input,index)=><article key={input.index}><header><span>{index+1}</span><div><small>INSUMO</small><h4>{input.name||`Insumo ${index+1}`}</h4></div></header><div><span><small>Dosis por hectárea</small><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} {input.unit||"u"}/ha</strong></span><span><small>Precio unitario</small><strong>{input.price.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></span><span><small>Cantidad calculada</small><strong>{input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2})} {input.unit||"u"}</strong></span><span className="input-subtotal"><small>Costo estimado</small><strong>{input.subtotal.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></span></div></article>)}</div></section>}
+    {monitoring.length>0&&<RecordDetailGroup title="Estado sanitario" text="Malezas, insectos, enfermedades e importancia" icon={Activity} entries={monitoring}/>} 
+    {technical.length>0&&<RecordDetailGroup title="Datos técnicos" text="Parámetros principales de la labor" icon={SlidersHorizontal} entries={technical}/>} 
+    {samples.length>0&&<RecordDetailGroup title="Muestras de suelo" text="Resultados organizados por muestra" icon={MapPin} entries={samples}/>} 
+    {costs.length>0&&<RecordDetailGroup title="Costos" text="Importes de insumos y ejecución" icon={CreditCard} entries={costs}/>} 
+    {gps.length>0&&<RecordDetailGroup title="Ubicación GPS" text="Coordenadas y precisión de captura" icon={LocateFixed} entries={gps}/>} 
+    {!inputs.length&&!monitoring.length&&!technical.length&&!samples.length&&!costs.length&&!gps.length&&<section><EmptyLine text="Este registro no tiene datos adicionales."/></section>}
+    {observations&&<ObservationBlock value={observations}/>}<RecordAttachments recordId={record.id}/></article></div>;
+}
+
+function RecordDetailGroup({title,text,icon:Icon,entries}:{title:string;text:string;icon:typeof Activity;entries:[string,unknown][]}){
+  return <section className="record-visual-group"><div className="detail-section-title"><Icon/><div><h3>{title}</h3><p>{text}</p></div></div><div className="detail-grid">{entries.map(([key,value])=><div key={key} className={key==="monitoring_priority"?"importance-detail-card":""}><small>{detailLabel(key)}</small><strong>{formatDetailValue(key,value)}</strong></div>)}</div></section>
+}
+
+function recordInputDetails(details:Record<string,unknown>,workedArea:number){
+  const grouped=new globalThis.Map<number,{index:number;name:string;dose:number;price:number;unit:string}>();
+  Object.entries(details).forEach(([key,value])=>{const match=key.match(/^input_(\d+)_(name|dose|price|unit)$/);if(!match)return;const index=Number(match[1]);const current=grouped.get(index)??{index,name:"",dose:0,price:0,unit:""};if(match[2]==="name")current.name=String(value??"");else if(match[2]==="unit")current.unit=String(value??"");else if(match[2]==="dose")current.dose=number(value as string|number);else current.price=number(value as string|number);grouped.set(index,current)});
+  return Array.from(grouped.values()).sort((a,b)=>a.index-b.index).map(input=>({...input,quantity:workedArea*input.dose,subtotal:workedArea*input.dose*input.price}));
 }
 
 function ObservationBlock({value,compact=false}:{value:string;compact?:boolean}){
@@ -932,6 +959,7 @@ function CampaignsView({ campaigns, records, canCreate, onCreate }: { campaigns:
 function CampaignDetail({campaign,records,onClose}:{campaign:Campaign;records:RecordRow[];onClose:()=>void}){const types=Array.from(new Set(records.map(effectiveRecordType)));return <div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><button className="page-back-button" onClick={onClose}><ChevronLeft/>Volver</button><div><span className="eyebrow">CAMPAÑA</span><h2>{campaign.name}</h2><p>{campaign.status==="active"?"Activa":campaign.status==="planned"?"Planificada":"Finalizada"}</p></div></header><div className="detail-hero"><CalendarDays/><div><small>Inicio</small><strong>{formatDate(campaign.start_date)}</strong></div><div><small>Fin</small><strong>{formatDate(campaign.end_date)}</strong></div><div><small>Registros</small><strong>{records.length}</strong></div></div><section><h3>Actividad de la campaña</h3><div className="detail-grid">{types.map(type=><div key={type}><small>{recordType(type)}</small><strong>{records.filter(row=>effectiveRecordType(row)===type).length}</strong></div>)}{!types.length&&<EmptyLine text="Esta campaña todavía no tiene actividad."/>}</div></section></article></div>}
 
 const REPORT_CATALOG = [
+  { id:"planting_progress", title:"Avance de siembra", text:"Superficie acumulada día por día, en hectáreas y porcentaje del total sembrable.", icon:TrendingUp, metric:"planted_area", dimension:"crop", chart:"line" },
   { id:"operations", title:"Trabajos y superficie", text:"Siembra, pulverización, fertilización, cosecha y labores.", icon:Tractor, metric:"worked_area", dimension:"type", chart:"bar" },
   { id:"production", title:"Producción y rendimiento", text:"Producción total, superficie cosechada y rendimiento por cultivo.", icon:Sprout, metric:"production", dimension:"crop", chart:"bar" },
   { id:"economy", title:"Costos e insumos", text:"Costos totales, por hectárea, labores e insumos utilizados.", icon:TrendingUp, metric:"cost", dimension:"type", chart:"bar" },
@@ -939,7 +967,7 @@ const REPORT_CATALOG = [
   { id:"water", title:"Evolución de napas", text:"Profundidad registrada y evolución cronológica por mes.", icon:Waves, metric:"water_table", dimension:"month", chart:"line" }
 ] as const;
 
-function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; plots: Plot[]; records: RecordRow[]; crops: Crop[] }) {
+function RealReportsView({ fields, plots, records, crops, campaigns }: { fields: Field[]; plots: Plot[]; records: RecordRow[]; crops: Crop[]; campaigns: Campaign[] }) {
   const [fieldId, setFieldId] = useState("");
   const [plotId, setPlotId] = useState("");
   const [crop, setCrop] = useState("");
@@ -964,6 +992,7 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
   const openReport=(id:string)=>{const report=REPORT_CATALOG.find(item=>item.id===id);if(!report)return;setSelectedReport(id);setChartMetric(report.metric);setChartDimension(report.dimension);setChartType(report.chart);setChartSelection("");setFiltersOpen(false)};
   if(!selectedReport)return <div className="page-content reports-home"><PageHead title="Reportes" text="Elegí qué querés analizar. Después vas a poder aplicar filtros y abrir el origen de cada dato."/><div className="report-catalog">{REPORT_CATALOG.map(({id,title,text,icon:Icon})=><button key={id} onClick={()=>openReport(id)}><span><Icon/></span><div><h3>{title}</h3><p>{text}</p></div><ChevronRight/></button>)}</div></div>;
   const reportTitle=REPORT_CATALOG.find(item=>item.id===selectedReport)?.title??"Reporte";
+  if(selectedReport==="planting_progress")return <PlantingProgressReport records={records} plots={plots} crops={crops} campaigns={campaigns} onBack={()=>setSelectedReport("")}/>;
   return <div className="page-content"><PageHead title={reportTitle} text="Combiná filtros, elegí el gráfico y tocá cualquier dato para ver su origen." action={<button className="soft-button report-back" onClick={()=>{setSelectedReport("");setChartSelection("")}}><ChevronLeft/>Todos los reportes</button>}/>
     <section className="report-filter-panel">
       <div className="report-filter-heading"><div><span className="report-filter-icon"><Filter/></span><div><h3>Filtros del informe</h3><p>{activeFilterCount?`${activeFilterCount} filtro${activeFilterCount===1?"":"s"} aplicado${activeFilterCount===1?"":"s"}`:"Mostrando toda la información disponible"}</p></div></div><div>{activeFilterCount>0&&<button className="filter-clear-compact" onClick={clearFilters}><RotateCcw/>Limpiar</button>}<button className="filter-toggle" onClick={()=>setFiltersOpen(value=>!value)}>{filtersOpen?"Ocultar":"Filtrar"}<ChevronDown className={filtersOpen?"rotated":""}/></button></div></div>
@@ -975,6 +1004,62 @@ function RealReportsView({ fields, plots, records, crops }: { fields: Field[]; p
     {contractor && <ContractorSummary contractor={contractor} records={filtered}/>} 
     <div className="content-card report-summary"><div className="priority-summary-head"><div><h3>Resumen de prioridades</h3><p>Filtrá los lotes por la prioridad asignada en el grupo.</p></div><div className="priority-filter"><button className={!priority ? "active" : ""} onClick={() => setPriority("")}>Todas</button><button className={priority === "#D32F2F" ? "active" : ""} onClick={() => setPriority("#D32F2F")}><i style={{background:"#D32F2F"}}/>Alta</button><button className={priority === "#FBC02D" ? "active" : ""} onClick={() => setPriority("#FBC02D")}><i style={{background:"#FBC02D"}}/>Media</button><button className={priority === "#388E3C" ? "active" : ""} onClick={() => setPriority("#388E3C")}><i style={{background:"#388E3C"}}/>Baja</button></div></div>{fields.filter(field => !fieldId || field.id === fieldId).map(field => <section key={field.id}><h4>{field.name}</h4>{filteredPlots.filter(plot => plot.field_id === field.id).map(plot => <div key={plot.id}><i style={{ background: plot.priority_color || "#77847e" }}/><span>{plot.name}</span><small>{plot.cropName || "Sin cultivo"}</small><strong>{number(plot.arable_area).toLocaleString("es-AR")} ha</strong></div>)}</section>)}</div>
   </div>;
+}
+
+type PlantingProgressPoint={date:string;daily:number;accumulated:number;percent:number};
+function PlantingProgressReport({records,plots,crops,campaigns,onBack}:{records:RecordRow[];plots:Plot[];crops:Crop[];campaigns:Campaign[];onBack:()=>void}){
+  const campaignOptions=useMemo(()=>{
+    const fromRecords=records.map(row=>({id:row.campaign_id||relation(row.campaigns)?.id||"",name:relation(row.campaigns)?.name||""})).filter(item=>item.id&&item.name);
+    return Array.from(new globalThis.Map([...campaigns.map(item=>[item.id,{id:item.id,name:item.name}] as const),...fromRecords.map(item=>[item.id,item] as const)]).values());
+  },[campaigns,records]);
+  const cropOptions=useMemo(()=>Array.from(new Set([...crops.map(item=>item.name),...records.map(recordCrop)].filter(Boolean))).sort((a,b)=>a.localeCompare(b,"es")),[crops,records]);
+  const[campaignId,setCampaignId]=useState("");
+  const[crop,setCrop]=useState("");
+  useEffect(()=>{if(!campaignId&&campaignOptions.length)setCampaignId(campaignOptions[0].id)},[campaignId,campaignOptions]);
+  useEffect(()=>{if(!crop&&cropOptions.length)setCrop(cropOptions[0])},[crop,cropOptions]);
+  const report=useMemo(()=>buildPlantingProgress(records,plots,campaignId,crop),[records,plots,campaignId,crop]);
+  const current=report.points.at(-1)?.accumulated??0;
+  const percentage=report.total>0?Math.min(100,current/report.total*100):0;
+  return <div className="page-content planting-progress-page"><PageHead title="Avance de siembra" text="Evolución acumulada diaria, sin duplicar la superficie de un lote por tener varios registros." action={<button className="soft-button report-back" onClick={onBack}><ChevronLeft/>Todos los reportes</button>}/>
+    <section className="planting-selector-card"><div><span><Sprout/></span><div><h3>Elegí qué querés seguir</h3><p>El total se calcula una sola vez por lote, usando su superficie sembrable.</p></div></div><div className="planting-selectors"><label><span>Campaña</span><select value={campaignId} onChange={event=>setCampaignId(event.target.value)}>{campaignOptions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Cultivo</span><select value={crop} onChange={event=>setCrop(event.target.value)}>{cropOptions.map(item=><option key={item} value={item}>{item}</option>)}</select></label></div></section>
+    <div className="planting-kpis"><article><small>Sembrado acumulado</small><strong>{current.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><span>al último día registrado</span></article><article><small>Superficie sembrable total</small><strong>{report.total.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><span>{report.plotCount} lote{report.plotCount===1?"":"s"}, sin duplicados</span></article><article className="planting-percent"><small>Avance</small><strong>{percentage.toLocaleString("es-AR",{maximumFractionDigits:1})}%</strong><span>{current.toLocaleString("es-AR",{maximumFractionDigits:2})} de {report.total.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</span></article></div>
+    <section className="chart-card planting-chart-card"><div className="chart-head"><div><h3>Superficie acumulada día por día</h3><p>{crop||"Cultivo"} · {campaignOptions.find(item=>item.id===campaignId)?.name||"Campaña"}</p></div><span className="planting-chart-unit">ha / % del total</span></div><PlantingProgressChart points={report.points} total={report.total}/></section>
+    <section className="content-card planting-daily"><div className="detail-section-title"><CalendarDays/><div><h3>Detalle diario</h3><p>Cada fecha conserva la resolución diaria aunque ese día no haya nuevas hectáreas.</p></div></div>{report.points.length?<div className="planting-daily-grid">{report.points.map(point=><article key={point.date}><time>{formatShortDay(point.date)}</time><span className={point.daily>0?"has-progress":""}>{point.daily>0?`+${point.daily.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"Sin nuevas ha"}</span><strong>{point.accumulated.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><small>{point.percent.toLocaleString("es-AR",{maximumFractionDigits:1})}%</small></article>)}</div>:<EmptyLine text="No hay siembras cargadas para esta campaña y cultivo."/>}</section>
+  </div>
+}
+
+function buildPlantingProgress(records:RecordRow[],plots:Plot[],campaignId:string,crop:string){
+  if(!campaignId||!crop)return{total:0,plotCount:0,points:[] as PlantingProgressPoint[]};
+  const normalizedCrop=normalizeText(crop);
+  const campaignRecords=records.filter(row=>(row.campaign_id||relation(row.campaigns)?.id)===campaignId&&row.plot_id);
+  const latestCropRecord=new globalThis.Map<string,RecordRow>();
+  campaignRecords.filter(row=>recordCrop(row)).forEach(row=>{const current=latestCropRecord.get(row.plot_id!);if(!current||recordSortKey(row)>recordSortKey(current))latestCropRecord.set(row.plot_id!,row)});
+  const eligiblePlots=plots.filter(plot=>{const latest=latestCropRecord.get(plot.id);return Boolean(latest&&normalizeText(recordCrop(latest))===normalizedCrop)});
+  const plotAreas=new globalThis.Map(eligiblePlots.map(plot=>[plot.id,Math.max(0,number(plot.arable_area)||number(plot.total_area))]));
+  const total=sum(Array.from(plotAreas.values()));
+  const remaining=new globalThis.Map(plotAreas);
+  const daily=new globalThis.Map<string,number>();
+  campaignRecords.filter(row=>effectiveRecordType(row)==="sowing"&&normalizeText(recordCrop(row))===normalizedCrop&&plotAreas.has(row.plot_id!)).sort((a,b)=>recordSortKey(a).localeCompare(recordSortKey(b))).forEach(row=>{
+    const available=remaining.get(row.plot_id!)??0;if(available<=0)return;
+    const requested=number(row.worked_area)>0?number(row.worked_area):available;
+    const contribution=Math.min(available,requested);remaining.set(row.plot_id!,available-contribution);
+    const date=String(row.record_date).slice(0,10);daily.set(date,(daily.get(date)??0)+contribution);
+  });
+  const dates=Array.from(daily.keys()).sort();if(!dates.length)return{total,plotCount:eligiblePlots.length,points:[] as PlantingProgressPoint[]};
+  const start=parseLocalDay(dates[0]),end=parseLocalDay(dates.at(-1)!);let accumulated=0;const points:PlantingProgressPoint[]=[];
+  for(let cursor=new Date(start);cursor<=end;cursor.setDate(cursor.getDate()+1)){const date=localDayKey(cursor);const increment=daily.get(date)??0;accumulated=Math.min(total,accumulated+increment);points.push({date,daily:increment,accumulated,percent:total>0?accumulated/total*100:0})}
+  return{total,plotCount:eligiblePlots.length,points};
+}
+function recordSortKey(row:RecordRow){return `${String(row.record_date).slice(0,10)}T${row.created_at||""}`}
+function parseLocalDay(value:string){const[year,month,day]=value.split("-").map(Number);return new Date(year,month-1,day)}
+function localDayKey(value:Date){return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`}
+function formatShortDay(value:string){return new Intl.DateTimeFormat("es-AR",{day:"2-digit",month:"short"}).format(parseLocalDay(value))}
+function PlantingProgressChart({points,total}:{points:PlantingProgressPoint[];total:number}){
+  if(!points.length)return <EmptyLine text="Todavía no hay superficie de siembra para graficar."/>;
+  const width=960,height=330,left=58,right=26,top=28,bottom=52,maximum=Math.max(total,...points.map(point=>point.accumulated),1);const usableWidth=width-left-right,usableHeight=height-top-bottom;
+  const x=(index:number)=>left+(points.length===1?.5:index/(points.length-1))*usableWidth;const y=(value:number)=>top+(maximum-value)/maximum*usableHeight;
+  const line=points.map((point,index)=>`${x(index)},${y(point.accumulated)}`).join(" ");const area=`${left},${height-bottom} ${line} ${x(points.length-1)},${height-bottom}`;const labelStep=Math.max(1,Math.ceil(points.length/7));
+  return <div className="planting-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Avance diario acumulado de siembra"><defs><linearGradient id="plantingArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#55ba70" stopOpacity=".38"/><stop offset="1" stopColor="#55ba70" stopOpacity=".03"/></linearGradient></defs>{[0,.25,.5,.75,1].map(step=>{const value=maximum*step;return <g key={step}><line x1={left} y1={y(value)} x2={width-right} y2={y(value)} className="planting-grid-line"/><text x={left-9} y={y(value)+4} className="planting-axis-value">{value.toLocaleString("es-AR",{maximumFractionDigits:0})}</text></g>})}<polygon points={area} fill="url(#plantingArea)"/><polyline points={line} className="planting-line"/>{points.map((point,index)=><g key={point.date}><circle cx={x(index)} cy={y(point.accumulated)} r={point.daily>0?5:2.5} className={point.daily>0?"planting-point active":"planting-point"}><title>{formatShortDay(point.date)}: {point.accumulated.toLocaleString("es-AR",{maximumFractionDigits:2})} ha ({point.percent.toLocaleString("es-AR",{maximumFractionDigits:1})}%)</title></circle>{(index%labelStep===0||index===points.length-1)&&<text x={x(index)} y={height-22} className="planting-axis-date">{formatShortDay(point.date)}</text>}</g>)}</svg></div>
 }
 
 const REPORT_METRICS = [
