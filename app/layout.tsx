@@ -3,6 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import "./navigation.css";
 import "./plans.css";
+import "./team.css";
 
 export const metadata: Metadata = {
   title: "Growr360 — Gestión agrícola inteligente",

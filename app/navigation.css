@@ -1,5 +1,4 @@
 /* Navegación jerárquica y desplazamiento estable de cada pantalla. */
-html:has(.app-shell),body:has(.app-shell){height:100%;overflow:hidden}
 .app-shell{height:100dvh!important;min-height:0!important;overflow:hidden!important}
 .app-shell>main{height:100dvh!important;min-height:0!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
 .app-shell>main>.page-content{flex:1 1 auto!important;min-height:0!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;padding-bottom:72px}
@@ -25,6 +24,13 @@ html:has(.app-shell),body:has(.app-shell){height:100%;overflow:hidden}
 .nav-subitem em{min-width:24px;height:20px;padding:0 6px;border-radius:999px;display:grid;place-items:center;font-size:9px;font-style:normal}
 .workspace-card{flex:0 0 auto;margin-top:6px!important}
 .sidebar-footer{flex:0 0 auto}
+.topbar-group-picker{height:48px;min-width:190px;max-width:260px;padding:6px 10px;border:1px solid var(--line);border-radius:14px;background:var(--card);display:grid;grid-template-columns:30px minmax(0,1fr) 14px;align-items:center;gap:7px;box-shadow:0 5px 16px #173d2b0a;cursor:pointer}
+.topbar-group-picker>svg:first-child{width:30px;height:30px;padding:7px;border-radius:10px;background:var(--mint);color:var(--green)}
+.topbar-group-picker>svg:last-child{width:14px;color:var(--green)}
+.topbar-group-picker>span{min-width:0;display:grid}
+.topbar-group-picker small{font-size:8px;line-height:1;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.08em}
+.topbar-group-picker select{width:100%!important;height:23px!important;min-height:0!important;padding:0 18px 0 0!important;border:0!important;background:transparent!important;color:var(--ink)!important;font-size:12px!important;font-weight:850!important;box-shadow:none!important;appearance:none}
+.profile-avatar{overflow:hidden}.profile-avatar img{width:100%;height:100%;display:block;object-fit:cover}
 @media(min-width:761px) and (max-width:1050px){
   .sidebar{width:230px!important;padding-inline:13px!important}
   .app-shell>main{width:calc(100% - 230px)!important;margin-left:230px!important}
@@ -33,9 +39,12 @@ html:has(.app-shell),body:has(.app-shell){height:100%;overflow:hidden}
   .sidebar-navigation{align-items:stretch!important}
 }
 @media(max-width:760px){
-  html:has(.app-shell),body:has(.app-shell){overflow:hidden}
   .app-shell>main{height:100dvh!important}
   .sidebar{height:100dvh!important;overflow:hidden!important}
   .sidebar-navigation{overflow-y:auto!important;overscroll-behavior:contain;padding-right:2px}
   .app-shell>main>.page-content{padding-bottom:96px}
+  .topbar-group-picker{min-width:0;max-width:145px;height:43px}
+  .topbar-group-picker small{display:none}
+  .topbar-group-picker select{height:28px!important;font-size:11px!important}
+  .sync-pill{display:none!important}
 }
