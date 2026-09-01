@@ -17,7 +17,7 @@ import {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "sb_publishable_waHR1lcMgPHyP32KlyBcEw_uAL6n6-g";
 
-type View = "mapa" | "campos" | "registros" | "napas" | "campanas" | "reportes" | "equipo" | "solicitudes" | "invitaciones" | "mas" | "configuracion" | "grupo";
+type View = "mapa" | "campos" | "registros" | "monitoreos" | "napas" | "campanas" | "reportes" | "equipo" | "solicitudes" | "invitaciones" | "mas" | "configuracion" | "grupo" | "planes";
 type Group = { id: string; name: string; description?: string | null; cuit?: string | null; image_path?: string | null };
 type GroupDiscovery = {
   group_id: string; name: string; description?: string | null; cuit?: string | null;
@@ -72,6 +72,9 @@ type RecordAttachment = { id:string; record_id:string; file_name:string; storage
 type ResolvedAttachment = RecordAttachment & { url:string };
 type Supply = { id:string; name:string; category:string; unit:string; unit_price:number|string; currency:string };
 type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
+type SubscriptionPlan = { code:"free"|"pro"|"business";name:string;max_hectares:number|null;max_fields:number|null;max_lots:number|null;max_users:number|null;max_kml_imports:number|null;features:string[] };
+type UserSubscription = { id:string;user_id:string;plan:"free"|"pro"|"business";status:"active"|"trialing"|"expired"|"cancelled";started_at:string;expires_at?:string|null };
+type SubscriptionUsage = { user_id:string;kml_imports:number;updated_at:string };
 type Member = { user_id: string; role: string; status: string; profiles?: Profile | null; member_permission_overrides?: PermissionOverride[] | null };
 type GeoFeature = {
   type: "Feature";
@@ -85,11 +88,17 @@ const nav = [
   { id: "mapa" as View, label: "Mapa", icon: Map },
   { id: "campos" as View, label: "Campos", icon: Sprout },
   { id: "registros" as View, label: "Registros", icon: FileText },
+  { id: "monitoreos" as View, label: "Monitoreos", icon: Eye },
   { id: "napas" as View, label: "Napas", icon: Waves },
   { id: "campanas" as View, label: "Campañas", icon: CalendarDays },
   { id: "reportes" as View, label: "Reportes", icon: TrendingUp },
   { id: "equipo" as View, label: "Equipo", icon: Users },
-  { id: "mas" as View, label: "Más", icon: Grid2X2 }
+  { id: "mas" as View, label: "Más", icon: Grid2X2 },
+  { id: "configuracion" as View, label: "Configuración", icon: Settings2 },
+  { id: "grupo" as View, label: "Configuración del grupo", icon: ShieldCheck },
+  { id: "solicitudes" as View, label: "Solicitudes", icon: UserPlus },
+  { id: "invitaciones" as View, label: "Invitaciones", icon: Link2 },
+  { id: "planes" as View, label: "Planes", icon: CreditCard }
 ];
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -347,6 +356,10 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [pendingRecord, setPendingRecord] = useState<{ plotId: string; type: string } | null>(null);
   const [pendingForm, setPendingForm] = useState<"field"|"campaign"|"client"|"contractor"|"record"|null>(null);
   const [groupBrowserOpen, setGroupBrowserOpen] = useState(false);
+  const [navExpanded, setNavExpanded] = useState({ gestion: false, actividad: false, mas: false });
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsage | null>(null);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) ?? null;
@@ -407,11 +420,17 @@ function AuthenticatedApp({ session }: { session: Session }) {
     setLoading(true);
     setError("");
     const userId = session.user.id;
-    const [profileResult, membershipResult] = await Promise.all([
+    const [profileResult, membershipResult, plansResult, subscriptionResult, usageResult] = await Promise.all([
       supabase.from("profiles").select("id,first_name,last_name,username,email").eq("id", userId).single(),
-      supabase.from("group_members").select("group_id,role,status,groups(id,name,description,cuit,image_path),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at")
+      supabase.from("group_members").select("group_id,role,status,groups(id,name,description,cuit,image_path),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at"),
+      supabase.from("subscription_plans").select("code,name,max_hectares,max_fields,max_lots,max_users,max_kml_imports,features"),
+      supabase.from("user_subscriptions").select("id,user_id,plan,status,started_at,expires_at").eq("user_id", userId).maybeSingle(),
+      supabase.from("subscription_usage").select("user_id,kml_imports,updated_at").eq("user_id", userId).maybeSingle()
     ]);
     if (profileResult.data) setProfile(profileResult.data as Profile);
+    setPlans((plansResult.data ?? []) as SubscriptionPlan[]);
+    setSubscription((subscriptionResult.data as UserSubscription | null) ?? null);
+    setSubscriptionUsage((usageResult.data as SubscriptionUsage | null) ?? null);
     if (membershipResult.error) {
       setError(membershipResult.error.message);
       setLoading(false); return;
@@ -455,25 +474,40 @@ function AuthenticatedApp({ session }: { session: Session }) {
 
   if (loading) return <LoadingScreen text="Cargando tus campos y lotes…"/>;
 
+  const openView = (nextView: View) => { setView(nextView); setSidebarOpen(false); };
+  const sidebarItem = (id: View, label: string, Icon: typeof Map, badge?: number) => <button key={id} className={`nav-subitem ${view === id ? "active" : ""}`} onClick={() => openView(id)}><Icon/><span>{label}</span>{badge ? <em>{badge}</em> : null}</button>;
+  const groupAdmin = activeMembership?.role === "owner" || activeMembership?.role === "admin";
+
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
       <div className="sidebar-top"><Brand/><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X/></button></div>
-      <nav>{nav.map(item => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => { setView(item.id); setSidebarOpen(false); }}><item.icon/><span>{item.label}</span>{item.id === "registros" && records.length > 0 && <em>{records.length}</em>}</button>)}</nav>
+      <nav className="sidebar-navigation">
+        <button className={`nav-direct ${view === "mapa" ? "active" : ""}`} onClick={() => openView("mapa")}><Map/><span>Mapa</span></button>
+        <section className={`nav-group ${navExpanded.gestion ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, gestion: !value.gestion }))}><BriefcaseBusiness/><span>Gestión</span><ChevronDown/></button>
+          {navExpanded.gestion && <div className="nav-submenu">{sidebarItem("campos", "Campos", Sprout)}{sidebarItem("equipo", "Equipo", Users)}{sidebarItem("reportes", "Reportes", TrendingUp)}</div>}
+        </section>
+        <section className={`nav-group ${navExpanded.actividad ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, actividad: !value.actividad }))}><Activity/><span>Actividad</span><ChevronDown/></button>
+          {navExpanded.actividad && <div className="nav-submenu">{sidebarItem("registros", "Registros", FileText, records.filter(row => !["monitoring", "napa"].includes(effectiveRecordType(row))).length)}{sidebarItem("monitoreos", "Monitoreos", Eye, records.filter(row => effectiveRecordType(row) === "monitoring").length)}{sidebarItem("campanas", "Campañas", CalendarDays)}{sidebarItem("napas", "Napas", Waves)}</div>}
+        </section>
+        <section className={`nav-group ${navExpanded.mas ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, mas: !value.mas }))}><Grid2X2/><span>Más</span><ChevronDown/></button>
+          {navExpanded.mas && <div className="nav-submenu">{sidebarItem("mas", "Más herramientas", Grid2X2)}{sidebarItem("configuracion", "Configuración", Settings2)}{sidebarItem("equipo", "Equipo y permisos", Users)}{sidebarItem("planes", "Planes", CreditCard)}{groupAdmin && sidebarItem("solicitudes", "Solicitudes", UserPlus)}{groupAdmin && sidebarItem("invitaciones", "Invitaciones", Link2)}{groupAdmin && sidebarItem("grupo", "Configuración del grupo", ShieldCheck)}<button className="nav-subitem" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button></div>}
+        </section>
+      </nav>
       <div className="workspace-card">
         <div className="workspace-icon"><Tractor/></div>
         <label><small>Espacio activo</small><select value={groupId} onChange={event => switchGroup(event.target.value)}>{memberships.map(m => { const item = relation(m.groups); return item ? <option value={m.group_id} key={m.group_id}>{item.name}</option> : null; })}</select></label>
         <ChevronDown/>
       </div>
-      <button className="group-discovery-shortcut" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button>
       <div className="sidebar-footer">
-        {(activeMembership?.role === "owner" || activeMembership?.role === "admin")&&<button className={view === "grupo" ? "active" : ""} onClick={() => { setView("grupo"); setSidebarOpen(false); }}><Users/>Configuración del grupo</button>}
-        <button className={view === "configuracion" ? "active" : ""} onClick={() => { setView("configuracion"); setSidebarOpen(false); }}><Settings2/>Configuración</button>
         <div className="user-mini"><div className="avatar">{initials(name)}</div><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
       </div>
     </aside>
     <main>
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{view === "configuracion" ? "Configuración" : view === "grupo" ? "Configuración del grupo" : view === "solicitudes" ? "Solicitudes" : view === "invitaciones" ? "Invitaciones" : nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
+        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
         <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><button className="avatar-button">{initials(name)}</button></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
@@ -481,7 +515,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
       {!groupId ? <EmptyWorkspace onGroups={() => setGroupBrowserOpen(true)}/> : <>
         {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields")} onCreate={() => setPendingForm("field")} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
-        {view === "registros" && <RealRecordsView records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
+        {view === "registros" && <RealRecordsView mode="records" records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
+        {view === "monitoreos" && <RealRecordsView mode="monitoring" records={records} canCreate={hasPermission("create_monitoring")} onCreate={() => { setPendingRecord({plotId:"",type:"monitoring"}); setPendingForm("record"); }}/>} 
         {view === "napas" && <NapaView records={records} canCreate={hasPermission("create_records")} onCreate={() => { setPendingRecord({plotId:"",type:"napa"}); setPendingForm("record"); }}/>} 
         {view === "campanas" && <CampaignsView campaigns={campaigns} records={records} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops} campaigns={campaigns}/>}
@@ -489,6 +524,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "solicitudes" && <RealTeamView section="requests" groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "invitaciones" && <RealTeamView section="invitations" groupId={groupId} members={members} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "mas" && <MoreView contractors={contractors} canManage={hasPermission("create_records")} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onCreateContractor={()=>setPendingForm("contractor")} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")} onOpenGroupSettings={()=>setView("grupo")}/>} 
+        {view === "planes" && <PlansView plans={plans} subscription={subscription} usage={subscriptionUsage} fields={fields} plots={plots} members={members}/>} 
         {view === "configuracion" && <RealSettingsView mode="personal" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {view === "grupo" && <RealSettingsView mode="group" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} contractors={contractors} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
@@ -706,6 +742,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       }else kml=await file.text();
       const features=kmlFeatures(kml);
       if(!features.length)throw new Error("No encontramos polígonos de lotes en el archivo.");
+      const claim=await supabase.rpc("claim_kml_import");
+      if(claim.error)throw new Error(claim.error.message);
       setSelectedPlot(null);setImportQueue(features.slice(1));setDraft(features[0]);setDrawing(false);
     }catch(reason){setSatelliteError(reason instanceof Error?reason.message:"No se pudo importar el archivo.");}
     if(kmzInput.current)kmzInput.current.value="";
@@ -935,11 +973,12 @@ function RealFieldsView({ fields, plots, onOpenPlot, canCreate, onCreate }: { fi
   </div>;
 }
 
-function RealRecordsView({ records, canCreate, onCreate }: { records: RecordRow[]; canCreate:boolean; onCreate:()=>void }) {
+function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { records: RecordRow[]; canCreate:boolean; onCreate:()=>void; mode?:"records"|"monitoring" }) {
   const [query, setQuery] = useState("");
   const [selected,setSelected]=useState<RecordRow|null>(null);
-  const visible = records.filter(row => effectiveRecordType(row)!=="napa"&&JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
-  return <div className="page-content"><PageHead title="Registros" text="Labores, monitoreos y análisis. Las napas tienen su propia sección." action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>Nuevo registro</button>:undefined}/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por campo, lote o tipo…"/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <article role="button" tabIndex={0} className="record-card interactive-card" key={row.id} onClick={()=>setSelected(row)}><div className="record-type-icon"><Leaf/></div><div className="record-main"><span>{recordType(effectiveRecordType(row))}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><p>{number(row.worked_area).toLocaleString("es-AR")} ha</p></div><div className="record-meta"><strong>{formatDate(row.record_date)}</strong><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small></div><button className="icon-button" aria-label="Ver detalle"><ChevronRight/></button></article>)}{!visible.length && <EmptyLine text="No hay registros para mostrar."/>}</div>{selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>}</div>;
+  const visible = records.filter(row => (mode === "monitoring" ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row))) && JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
+  const monitoring = mode === "monitoring";
+  return <div className="page-content"><PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Seguimiento del estado de los cultivos, plagas, malezas y enfermedades." : "Siembras, aplicaciones, cosechas, labores y análisis del grupo."} action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>:undefined}/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar monitoreo por campo o lote…" : "Buscar por campo, lote o tipo…"}/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <article role="button" tabIndex={0} className="record-card interactive-card" key={row.id} onClick={()=>setSelected(row)}><div className="record-type-icon">{monitoring ? <Eye/> : <Leaf/>}</div><div className="record-main"><span>{recordType(effectiveRecordType(row))}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><p>{number(row.worked_area).toLocaleString("es-AR")} ha</p></div><div className="record-meta"><strong>{formatDate(row.record_date)}</strong><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small></div><button className="icon-button" aria-label="Ver detalle"><ChevronRight/></button></article>)}{!visible.length && <EmptyLine text={monitoring ? "No hay monitoreos para mostrar." : "No hay registros para mostrar."}/>}</div>{selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>}</div>;
 }
 
 function NapaView({records,canCreate,onCreate}:{records:RecordRow[];canCreate:boolean;onCreate:()=>void}){
@@ -1125,6 +1164,29 @@ function ContractorSummary({contractor,records}:{contractor:string;records:Recor
 function MoreView({contractors,canManage,canManageGroup,onCreateContractor,onOpenTeam,onOpenSettings,onOpenGroupSettings}:{contractors:Contractor[];canManage:boolean;canManageGroup:boolean;onCreateContractor:()=>void;onOpenTeam:()=>void;onOpenSettings:()=>void;onOpenGroupSettings:()=>void}){
   const [open,setOpen]=useState<Contractor|null>(null);
   return <div className="page-content"><PageHead title="Más" text="Catálogos, equipo y preferencias."/><div className="more-grid"><section className="content-card contractor-directory"><header><div className="settings-title"><ContactRound/><div><h3>Contratistas</h3><p>Una sola ficha por contratista para mantener reportes consistentes.</p></div></div>{canManage&&<button className="primary-action" onClick={onCreateContractor}><Plus/>Nuevo contratista</button>}</header><div className="contractor-directory-list">{contractors.map(contractor=><button key={contractor.id} onClick={()=>setOpen(contractor)}><div className="avatar">{initials(contractor.name)}</div><div><strong>{contractor.name}</strong><small>{contractor.document?`CUIT/DNI ${contractor.document}`:"Sin documento"}{contractor.phone?` · ${contractor.phone}`:""}</small></div><ChevronRight/></button>)}{!contractors.length&&<EmptyLine text="Todavía no hay contratistas cargados."/>}</div></section><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button>{canManageGroup&&<button className="more-option" onClick={onOpenGroupSettings}><ShieldCheck/><div><strong>Configuración del grupo</strong><small>Identidad, foto y datos institucionales</small></div><ChevronRight/></button>}<button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Ajustes personales</strong><small>Tema, unidades, fechas y avisos</small></div><ChevronRight/></button></div>{open&&<div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><div><span className="eyebrow">CONTRATISTA</span><h2>{open.name}</h2></div><button className="icon-button" onClick={()=>setOpen(null)}><X/></button></header><div className="contractor-contact-grid"><div><Phone/><small>Teléfono</small><strong>{open.phone||"Sin datos"}</strong></div><div><CreditCard/><small>CUIT o DNI</small><strong>{open.document||"Sin datos"}</strong></div><div><Home/><small>Dirección</small><strong>{open.address||"Sin datos"}</strong></div></div>{open.notes&&<section><h3>Nota</h3><p>{open.notes}</p></section>}</article></div>}</div>
+}
+
+function PlansView({plans,subscription,usage,fields,plots,members}:{plans:SubscriptionPlan[];subscription:UserSubscription|null;usage:SubscriptionUsage|null;fields:Field[];plots:Plot[];members:Member[]}){
+  const validSubscription=subscription&&["active","trialing"].includes(subscription.status)&&(!subscription.expires_at||new Date(subscription.expires_at)>new Date());
+  const currentCode=validSubscription?subscription.plan:"free";
+  const ordered=["free","pro","business"].map(code=>plans.find(plan=>plan.code===code)).filter(Boolean) as SubscriptionPlan[];
+  const current=ordered.find(plan=>plan.code===currentCode)??plans.find(plan=>plan.code===currentCode);
+  const hectares=sum(fields.map(field=>number(field.arable_area)));
+  const metrics=[
+    {label:"Hectáreas",value:hectares,limit:current?.max_hectares,suffix:" ha"},
+    {label:"Campos",value:fields.length,limit:current?.max_fields},
+    {label:"Lotes",value:plots.length,limit:current?.max_lots},
+    {label:"Usuarios",value:members.length,limit:current?.max_users},
+    {label:"Importaciones KML/KMZ",value:usage?.kml_imports??0,limit:current?.max_kml_imports}
+  ];
+  const featureNames:Record<string,string>={campaigns:"Campañas",records:"Registros y monitoreos",tasks:"Tareas",map:"Mapa productivo",plot_drawing:"Trazado de lotes",satellite_latest_ndvi:"Última imagen NDVI",satellite_history:"Historial satelital",satellite_comparison:"Comparación satelital",satellite_alerts:"Alertas satelitales",advanced_analytics:"Analítica avanzada",exports:"Exportaciones",advanced_roles:"Roles avanzados",enterprise:"Operación empresarial"};
+  const planText=(plan:SubscriptionPlan)=>plan.code==="free"?"Para empezar a ordenar la operación":plan.code==="pro"?"Para productores y equipos en crecimiento":"Para operaciones sin límites";
+  return <div className="page-content plans-page"><PageHead title="Planes Growr" text="Consultá tu plan, los límites disponibles y el uso actual de tu cuenta."/>
+    <section className="plan-current"><div><span><ShieldCheck/></span><div><small>PLAN ACTUAL</small><h3>{current?.name??"Growr Free"}</h3><p>{subscription?.status==="trialing"?"Período de prueba activo":"Tu información y tus límites se sincronizan con la app."}</p></div></div>{subscription?.expires_at&&<time>Vigente hasta {formatDate(subscription.expires_at)}</time>}</section>
+    <section className="plan-usage"><header><div><h3>Uso del plan</h3><p>Los límites se aplican igual en la web y en la aplicación.</p></div><span>{currentCode.toUpperCase()}</span></header><div>{metrics.map(metric=>{const percent=metric.limit==null?0:Math.min(100,(metric.value/Math.max(1,metric.limit))*100);return <article key={metric.label}><div><strong>{metric.label}</strong><span>{metric.value.toLocaleString("es-AR",{maximumFractionDigits:2})}{metric.suffix??""} de {metric.limit==null?"Ilimitado":`${metric.limit.toLocaleString("es-AR")}${metric.suffix??""}`}</span></div><div className={metric.limit!=null&&percent>=90?"near-limit":""}><i style={{width:metric.limit==null?"100%":`${percent}%`}}/></div></article>})}</div></section>
+    <div className="plans-grid">{ordered.map(plan=><article key={plan.code} className={`${plan.code===currentCode?"current":""} ${plan.code}`}><header><div><span>{plan.code==="free"?<Leaf/>:plan.code==="pro"?<TrendingUp/>:<BriefcaseBusiness/>}</span><div><small>{plan.code==="free"?"INICIAL":plan.code==="pro"?"PROFESIONAL":"EMPRESA"}</small><h3>{plan.name}</h3><p>{planText(plan)}</p></div></div>{plan.code===currentCode&&<b>Tu plan</b>}</header><div className="plan-limits"><span>{plan.max_hectares==null?"Hectáreas ilimitadas":`Hasta ${plan.max_hectares.toLocaleString("es-AR")} ha`}</span><span>{plan.max_fields==null?"Campos y lotes ilimitados":`${plan.max_fields} campo y ${plan.max_lots} lotes`}</span><span>{plan.max_users==null?"Usuarios ilimitados":`Hasta ${plan.max_users} usuario${plan.max_users===1?"":"s"}`}</span><span>{plan.max_kml_imports==null?"Importaciones ilimitadas":`${plan.max_kml_imports} importación KML/KMZ`}</span></div><ul>{plan.features.map(feature=><li key={feature}><Check/>{featureNames[feature]??feature}</li>)}</ul><button disabled>{plan.code===currentCode?"Plan actual":"Próximamente"}</button></article>)}</div>
+    {!ordered.length&&<div className="content-card"><EmptyLine text="No pudimos cargar el catálogo de planes. Actualizá la página para volver a intentar."/></div>}
+  </div>;
 }
 
 function RealSettingsView({ mode, groupId, userId, settings, group, canManageGroup, onSaved, onGroupSaved }: { mode:"personal"|"group";groupId: string; userId: string; settings: AppSettings; group:Group|null; canManageGroup:boolean; onSaved: (value: AppSettings) => void; onGroupSaved:()=>void }) {
@@ -1423,7 +1485,7 @@ function EmptyLine({ text }: { text: string }) { return <div className="empty-li
 function PageHead({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div>{action}</div>; }
 function Stat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof MapPin }) { return <div className="stat-card"><div><Icon/></div><section><small>{label}</small><strong>{value}</strong><p>{detail}</p></section></div>; }
 function Kpi({ label, value }: { label: string; value: string }) { return <div className="kpi"><small>{label}</small><strong>{value}</strong><span className="positive">Datos reales</span></div>; }
-function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", napas:"Seguimiento de profundidad", campanas: "Ciclos productivos", reportes: "Análisis del grupo activo", equipo: "Miembros, roles y permisos", solicitudes:"Ingresos pendientes al grupo", invitaciones:"Accesos directos por enlace", mas:"Catálogos y herramientas", configuracion: "Preferencias y grupo", grupo:"Identidad y datos del grupo", mapa: "" } as Record<View, string>)[view]; }
+function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", registros: "Actividad sincronizada del equipo", monitoreos:"Seguimiento agronómico", napas:"Seguimiento de profundidad", campanas: "Ciclos productivos", reportes: "Análisis del grupo activo", equipo: "Miembros, roles y permisos", solicitudes:"Ingresos pendientes al grupo", invitaciones:"Accesos directos por enlace", mas:"Catálogos y herramientas", configuracion: "Preferencias personales", grupo:"Identidad y datos del grupo", planes:"Plan, límites y consumo", mapa: "" } as Record<View, string>)[view]; }
 function formTitle(value:string){return({field:"Crear campo",campaign:"Crear campaña",client:"Crear cliente",contractor:"Nuevo contratista",record:"Crear registro"}as Record<string,string>)[value]??"Nueva alta";}
 function cap(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "G"; }

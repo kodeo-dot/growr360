@@ -1,0 +1,41 @@
+/* Navegación jerárquica y desplazamiento estable de cada pantalla. */
+html,body{height:100%;overflow:hidden}
+.app-shell{height:100dvh!important;min-height:0!important;overflow:hidden!important}
+.app-shell>main{height:100dvh!important;min-height:0!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
+.app-shell>main>.page-content{flex:1 1 auto!important;min-height:0!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;padding-bottom:72px}
+.app-shell>main>.map-workspace{flex:1 1 auto;min-height:0;overflow:hidden}
+.sidebar{display:flex!important;flex-direction:column!important;overflow:hidden!important}
+.sidebar-navigation{flex:1 1 auto;min-height:0;overflow:hidden!important;display:flex!important;flex-direction:column;gap:4px!important}
+.sidebar-navigation button{width:100%;border:0;color:#a9bbb2;text-align:left}
+.nav-direct,.nav-group-trigger,.nav-subitem{position:relative;display:grid!important;align-items:center;gap:10px;border-radius:11px!important}
+.nav-direct,.nav-group-trigger{grid-template-columns:21px minmax(0,1fr) 17px;min-height:38px;padding:7px 10px!important;background:transparent!important;font-size:12px!important;font-weight:850;text-transform:uppercase;letter-spacing:.055em}
+.nav-direct{grid-template-columns:21px minmax(0,1fr)}
+.nav-direct svg,.nav-group-trigger svg{width:18px;height:18px}
+.nav-group-trigger>svg:last-child{width:15px;justify-self:end;transition:transform .15s ease!important}
+.nav-group.expanded>.nav-group-trigger>svg:last-child{transform:rotate(180deg)}
+.nav-direct:hover,.nav-group-trigger:hover{background:#ffffff09!important;color:#fff}
+.nav-direct.active{background:linear-gradient(90deg,#6bdf4e24,#ffffff08)!important;color:#9cec7f!important}
+.nav-direct.active:before{content:"";position:absolute;left:-3px;width:3px;height:22px;border-radius:9px;background:#77e052}
+.nav-submenu{margin:2px 0 4px 15px;padding-left:10px;border-left:1px solid #ffffff14;display:grid;gap:2px}
+.nav-subitem{grid-template-columns:18px minmax(0,1fr) auto;min-height:32px;padding:5px 8px!important;background:transparent!important;font-size:11px!important;font-weight:720!important;text-transform:none!important;letter-spacing:0!important}
+.nav-subitem svg{width:15px;height:15px}
+.nav-subitem:hover{background:#ffffff09!important;color:#fff!important}
+.nav-subitem.active{background:#6fdd5017!important;color:#9cec7f!important}
+.nav-subitem.active:before{display:none!important}
+.nav-subitem em{min-width:24px;height:20px;padding:0 6px;border-radius:999px;display:grid;place-items:center;font-size:9px;font-style:normal}
+.workspace-card{flex:0 0 auto;margin-top:6px!important}
+.sidebar-footer{flex:0 0 auto}
+@media(min-width:761px) and (max-width:1050px){
+  .sidebar{width:230px!important;padding-inline:13px!important}
+  .app-shell>main{width:calc(100% - 230px)!important;margin-left:230px!important}
+  .record-detail-backdrop{inset:74px 0 0 230px!important}
+  .sidebar .brand span,.sidebar-navigation span,.workspace-card label,.sidebar .user-mini>div:nth-child(2){display:block!important}
+  .sidebar-navigation{align-items:stretch!important}
+}
+@media(max-width:760px){
+  html,body{overflow:hidden}
+  .app-shell>main{height:100dvh!important}
+  .sidebar{height:100dvh!important;overflow:hidden!important}
+  .sidebar-navigation{overflow-y:auto!important;overscroll-behavior:contain;padding-right:2px}
+  .app-shell>main>.page-content{padding-bottom:96px}
+}

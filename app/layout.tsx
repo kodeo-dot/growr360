@@ -1,6 +1,8 @@
   import type { Metadata } from "next";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
+import "./navigation.css";
+import "./plans.css";
 
 export const metadata: Metadata = {
   title: "Growr360 — Gestión agrícola inteligente",
