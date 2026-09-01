@@ -1,5 +1,5 @@
 /* Navegación jerárquica y desplazamiento estable de cada pantalla. */
-html,body{height:100%;overflow:hidden}
+html:has(.app-shell),body:has(.app-shell){height:100%;overflow:hidden}
 .app-shell{height:100dvh!important;min-height:0!important;overflow:hidden!important}
 .app-shell>main{height:100dvh!important;min-height:0!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
 .app-shell>main>.page-content{flex:1 1 auto!important;min-height:0!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;padding-bottom:72px}
@@ -33,7 +33,7 @@ html,body{height:100%;overflow:hidden}
   .sidebar-navigation{align-items:stretch!important}
 }
 @media(max-width:760px){
-  html,body{overflow:hidden}
+  html:has(.app-shell),body:has(.app-shell){overflow:hidden}
   .app-shell>main{height:100dvh!important}
   .sidebar{height:100dvh!important;overflow:hidden!important}
   .sidebar-navigation{overflow-y:auto!important;overscroll-behavior:contain;padding-right:2px}
