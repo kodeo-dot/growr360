@@ -321,6 +321,10 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
 }
 
 function PublicLanding({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) {
+  useEffect(() => {
+    document.body.classList.add("public-site-open");
+    return () => document.body.classList.remove("public-site-open");
+  }, []);
   return <div className="public-site">
     <header className="public-header"><Brand/><nav><a href="#producto">Producto</a><a href="#soluciones">Soluciones</a><a href="#nosotros">Quiénes somos</a><a href="#terminos">Legal</a></nav><div className="public-auth-actions"><button className="public-login" onClick={onLogin}><CircleUserRound/>Ingresar</button><button className="public-cta" onClick={onRegister}>Crear cuenta <ArrowRight/></button></div></header>
     <main>
@@ -503,20 +507,21 @@ function AuthenticatedApp({ session }: { session: Session }) {
         </section>
       </nav>
       <div className="sidebar-footer">
-        <div className="user-mini"><div className="avatar">{initials(name)}</div><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
+        <label className="sidebar-group-picker"><Tractor/><span><small>Grupo</small><select value={groupId} onChange={event => switchGroup(event.target.value)}>{memberships.map(m => { const item = relation(m.groups); return item ? <option value={m.group_id} key={m.group_id}>{item.name}</option> : null; })}</select></span><ChevronDown/></label>
+        <div className="user-mini"><ProfileAvatar profile={profile} name={name} className="avatar"/><div><strong>{name}</strong><small>{roleName(activeMembership?.role)}</small></div><button title="Cerrar sesión" onClick={() => void supabase.auth.signOut()}><LogOut/></button></div>
       </div>
     </aside>
     <main>
       <header className="topbar">
         <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
-        <div className="topbar-actions"><label className="topbar-group-picker"><Tractor/><span><small>Grupo activo</small><select value={groupId} onChange={event => switchGroup(event.target.value)}>{memberships.map(m => { const item = relation(m.groups); return item ? <option value={m.group_id} key={m.group_id}>{item.name}</option> : null; })}</select></span><ChevronDown/></label><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><ProfileAvatar profile={profile} name={name} className="avatar-button"/></div>
+        <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><ProfileAvatar profile={profile} name={name} className="avatar-button"/></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {groupBrowserOpen && <GroupBrowser memberships={memberships} onClose={() => setGroupBrowserOpen(false)} onMembershipChanged={() => void loadWorkspace()}/>} 
       {!groupId ? <EmptyWorkspace onGroups={() => setGroupBrowserOpen(true)}/> : <>
         {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields")} onCreate={() => setPendingForm("field")} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
-        {view === "contratistas" && <ContractorsView contractors={contractors} canManage={hasPermission("create_records")} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onCreateContractor={()=>setPendingForm("contractor")} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")} onOpenGroupSettings={()=>setView("grupo")}/>}
+        {view === "contratistas" && <ContractorsView contractors={contractors} canManage={hasPermission("create_records")} onCreateContractor={()=>setPendingForm("contractor")}/>}
         {view === "registros" && <RealRecordsView mode="records" records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
         {view === "monitoreos" && <RealRecordsView mode="monitoring" records={records} canCreate={hasPermission("create_monitoring")} onCreate={() => { setPendingRecord({plotId:"",type:"monitoring"}); setPendingForm("record"); }}/>} 
         {view === "napas" && <NapaView records={records} canCreate={hasPermission("create_records")} onCreate={() => { setPendingRecord({plotId:"",type:"napa"}); setPendingForm("record"); }}/>} 
@@ -773,6 +778,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   }
   async function openSatellite() {
     const target = selectedPlot ?? mapPlots.find(plot => plot.id === satellitePlotId) ?? mapPlots[0];
+    setFilterPanel(null); setLayerPanelOpen(false); setRecentOpen(false); setSelectedPlot(null);
     setSatelliteOpen(true);
     if (target) await loadSatelliteScenes(target.id); else setSatelliteError("No hay lotes trazados disponibles.");
   }
@@ -808,6 +814,22 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     );
   }
 
+  function toggleMapFilter(kind: "campaign" | "monitoring") {
+    const opening = filterPanel !== kind;
+    setFilterPanel(opening ? kind : null);
+    if (opening) { setLayerPanelOpen(false); setSatelliteOpen(false); setRecentOpen(false); setSelectedPlot(null); }
+  }
+
+  function toggleMapLayers() {
+    const opening = !layerPanelOpen;
+    setLayerPanelOpen(opening);
+    if (opening) { setFilterPanel(null); setSatelliteOpen(false); setRecentOpen(false); setSelectedPlot(null); }
+  }
+
+  function openRecentRecords() {
+    setFilterPanel(null); setLayerPanelOpen(false); setSatelliteOpen(false); setSelectedPlot(null); setRecentOpen(true);
+  }
+
   return <div className="map-workspace">
     <div ref={mapNode} className="map-canvas"/>
     <div className="map-search-wrap">
@@ -819,12 +841,12 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       <button onClick={startDrawing} className="primary-map-action" disabled={!fields.length || !canManageLots} title={!canManageLots ? "Tu función no tiene permiso para administrar lotes" : "Dibujar nuevo lote"}><Plus/><span>Dibujar lote</span></button>
       <button onClick={locateUser} title="Centrar en mi ubicación"><LocateFixed/><span>Mi ubicación</span></button>
       <button onClick={() => setBaseMap(current => current === "satellite" ? "streets" : "satellite")} className={baseMap === "streets" ? "selected" : ""} title="Cambiar mapa base"><Map/><span>Mapa base</span></button>
-      <button onClick={() => setFilterPanel(current => current === "campaign" ? null : "campaign")} className={campaignFilterId ? "selected" : ""} title="Filtrar por campaña"><Filter/><span>Campaña</span></button>
-      <button onClick={() => setLayerPanelOpen(current => !current)} className={layerPanelOpen ? "selected" : ""} title="Capas y colores"><Layers3/><span>Capas</span></button>
-      <button onClick={openSatellite} className={satelliteOpen ? "selected" : ""} title="Imágenes de Planet Insights"><Satellite/><span>Planet</span></button>
-      <button onClick={() => setFilterPanel(current => current === "monitoring" ? null : "monitoring")} className={monitoringDays ? "selected" : ""} title="Monitoreos geolocalizados"><Activity/><span>Monitoreos</span></button>
+      <button onClick={() => toggleMapFilter("campaign")} className={filterPanel === "campaign" || campaignFilterId ? "selected" : ""} title="Filtrar por campaña"><Filter/><span>Campaña</span></button>
+      <button onClick={toggleMapLayers} className={layerPanelOpen ? "selected" : ""} title="Capas y colores"><Layers3/><span>Capas</span></button>
+      <button onClick={() => satelliteOpen ? setSatelliteOpen(false) : void openSatellite()} className={satelliteOpen ? "selected" : ""} title="Imágenes de Planet Insights"><Satellite/><span>Planet</span></button>
+      <button onClick={() => toggleMapFilter("monitoring")} className={filterPanel === "monitoring" || monitoringDays ? "selected" : ""} title="Monitoreos geolocalizados"><Activity/><span>Monitoreos</span></button>
     </div>}
-    {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={()=>setRecentOpen(true)} title="Últimos registros"><History/></button><button onClick={()=>kmzInput.current?.click()} disabled={!canManageLots} title="Importar KML o KMZ"><FileUp/></button><button onClick={()=>void exportKmz()} title={selectedPlot?"Exportar lote en KMZ":"Exportar todos los lotes en KMZ"}><Download/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button><input ref={kmzInput} hidden type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" onChange={event=>event.target.files?.[0]&&void importKmz(event.target.files[0])}/></div>}
+    {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={openRecentRecords} title="Últimos registros"><History/></button><button onClick={()=>kmzInput.current?.click()} disabled={!canManageLots} title="Importar KML o KMZ"><FileUp/></button><button onClick={()=>void exportKmz()} title={selectedPlot?"Exportar lote en KMZ":"Exportar todos los lotes en KMZ"}><Download/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button><input ref={kmzInput} hidden type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" onChange={event=>event.target.files?.[0]&&void importKmz(event.target.files[0])}/></div>}
     {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
     {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days"><button className={!monitoringDays ? "active" : ""} onClick={() => setMonitoringDays(null)}>Ocultar</button>{[3,7,15,30].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days} días</button>)}</div><small>Solo se muestran monitoreos tomados dentro del lote con GPS válido.</small></div>}
     {layerPanelOpen && <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>}
@@ -1163,9 +1185,9 @@ function ContractorSummary({contractor,records}:{contractor:string;records:Recor
   return <section className="content-card contractor-summary"><div className="contractor-summary-head"><div><span className="eyebrow">RESUMEN DEL CONTRATISTA</span><h3>{contractor}</h3><p>Trabajos incluidos según los filtros activos.</p></div><Tractor/></div><div className="contractor-kpis"><div><small>Trabajos</small><strong>{records.length}</strong></div><div><small>Superficie acumulada</small><strong>{totalArea.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div><div><small>Costo registrado</small><strong>{totalCost.toLocaleString("es-AR",{maximumFractionDigits:2})}</strong></div></div><div className="contractor-types">{types.map(item=><div key={item.type}><span>{recordType(item.type)}</span><small>{item.count} trabajo{item.count===1?"":"s"}</small><strong>{item.area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div>)}</div></section>;
 }
 
-function ContractorsView({contractors,canManage,canManageGroup,onCreateContractor,onOpenTeam,onOpenSettings,onOpenGroupSettings}:{contractors:Contractor[];canManage:boolean;canManageGroup:boolean;onCreateContractor:()=>void;onOpenTeam:()=>void;onOpenSettings:()=>void;onOpenGroupSettings:()=>void}){
+function ContractorsView({contractors,canManage,onCreateContractor}:{contractors:Contractor[];canManage:boolean;onCreateContractor:()=>void}){
   const [open,setOpen]=useState<Contractor|null>(null);
-  return <div className="page-content"><PageHead title="Contratistas" text="Directorio operativo del grupo."/><div className="more-grid"><section className="content-card contractor-directory"><header><div className="settings-title"><ContactRound/><div><h3>Contratistas</h3><p>Una sola ficha por contratista para mantener reportes consistentes.</p></div></div>{canManage&&<button className="primary-action" onClick={onCreateContractor}><Plus/>Nuevo contratista</button>}</header><div className="contractor-directory-list">{contractors.map(contractor=><button key={contractor.id} onClick={()=>setOpen(contractor)}><div className="avatar">{initials(contractor.name)}</div><div><strong>{contractor.name}</strong><small>{contractor.document?`CUIT/DNI ${contractor.document}`:"Sin documento"}{contractor.phone?` · ${contractor.phone}`:""}</small></div><ChevronRight/></button>)}{!contractors.length&&<EmptyLine text="Todavía no hay contratistas cargados."/>}</div></section><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button>{canManageGroup&&<button className="more-option" onClick={onOpenGroupSettings}><ShieldCheck/><div><strong>Configuración del grupo</strong><small>Identidad, foto y datos institucionales</small></div><ChevronRight/></button>}<button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Ajustes personales</strong><small>Tema, unidades, fechas y avisos</small></div><ChevronRight/></button></div>{open&&<div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><div><span className="eyebrow">CONTRATISTA</span><h2>{open.name}</h2></div><button className="icon-button" onClick={()=>setOpen(null)}><X/></button></header><div className="contractor-contact-grid"><div><Phone/><small>Teléfono</small><strong>{open.phone||"Sin datos"}</strong></div><div><CreditCard/><small>CUIT o DNI</small><strong>{open.document||"Sin datos"}</strong></div><div><Home/><small>Dirección</small><strong>{open.address||"Sin datos"}</strong></div></div>{open.notes&&<section><h3>Nota</h3><p>{open.notes}</p></section>}</article></div>}</div>
+  return <div className="page-content contractor-directory-page"><PageHead title="Contratistas" text="Directorio operativo del grupo."/><section className="content-card contractor-directory"><header><div className="settings-title"><ContactRound/><div><h3>{contractors.length} contratista{contractors.length===1?"":"s"}</h3><p>Contactos operativos disponibles para asignar en los registros.</p></div></div>{canManage&&<button className="primary-action" onClick={onCreateContractor}><Plus/>Nuevo contratista</button>}</header><div className="contractor-directory-list">{contractors.map(contractor=><button key={contractor.id} onClick={()=>setOpen(contractor)}><div className="avatar">{initials(contractor.name)}</div><div><strong>{contractor.name}</strong><small>{contractor.document?`CUIT/DNI ${contractor.document}`:"Sin documento"}{contractor.phone?` · ${contractor.phone}`:""}</small></div><span>Ver ficha</span><ChevronRight/></button>)}{!contractors.length&&<EmptyLine text="Todavía no hay contratistas cargados."/>}</div></section>{open&&<div className="record-detail-backdrop"><article className="record-detail-sheet compact-detail"><header><div><span className="eyebrow">CONTRATISTA</span><h2>{open.name}</h2></div><button className="icon-button" onClick={()=>setOpen(null)}><X/></button></header><div className="contractor-contact-grid"><div><Phone/><small>Teléfono</small><strong>{open.phone||"Sin datos"}</strong></div><div><CreditCard/><small>CUIT o DNI</small><strong>{open.document||"Sin datos"}</strong></div><div><Home/><small>Dirección</small><strong>{open.address||"Sin datos"}</strong></div></div>{open.notes&&<section><h3>Nota</h3><p>{open.notes}</p></section>}</article></div>}</div>
 }
 
 function MoreView({canManageGroup,onOpenTeam,onOpenSettings,onOpenGroupSettings,onOpenPlans}:{canManageGroup:boolean;onOpenTeam:()=>void;onOpenSettings:()=>void;onOpenGroupSettings:()=>void;onOpenPlans:()=>void}){
