@@ -362,7 +362,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [pendingRecord, setPendingRecord] = useState<{ plotId: string; type: string } | null>(null);
   const [pendingForm, setPendingForm] = useState<"field"|"campaign"|"client"|"contractor"|"record"|null>(null);
   const [groupBrowserOpen, setGroupBrowserOpen] = useState(false);
-  const [navExpanded, setNavExpanded] = useState({ gestion: false, actividad: false, mas: false });
+  const [navExpanded, setNavExpanded] = useState<"gestion" | "actividad" | "mas" | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsage | null>(null);
@@ -489,17 +489,17 @@ function AuthenticatedApp({ session }: { session: Session }) {
       <div className="sidebar-top"><Brand/><button className="icon-button mobile-close" onClick={() => setSidebarOpen(false)}><X/></button></div>
       <nav className="sidebar-navigation">
         <button className={`nav-direct ${view === "mapa" ? "active" : ""}`} onClick={() => openView("mapa")}><Map/><span>Mapa</span></button>
-        <section className={`nav-group ${navExpanded.gestion ? "expanded" : ""}`}>
-          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, gestion: !value.gestion }))}><BriefcaseBusiness/><span>Gestión</span><ChevronDown/></button>
-          {navExpanded.gestion && <div className="nav-submenu">{sidebarItem("campos", "Campos", Sprout)}{sidebarItem("contratistas", "Contratistas", ContactRound)}{sidebarItem("equipo", "Equipo", Users)}{sidebarItem("reportes", "Reportes", TrendingUp)}</div>}
+        <section className={`nav-group ${navExpanded === "gestion" ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => value === "gestion" ? null : "gestion")}><BriefcaseBusiness/><span>Gestión</span><ChevronDown/></button>
+          {navExpanded === "gestion" && <div className="nav-submenu">{sidebarItem("campos", "Campos", Sprout)}{sidebarItem("contratistas", "Contratistas", ContactRound)}{sidebarItem("equipo", "Equipo", Users)}{sidebarItem("reportes", "Reportes", TrendingUp)}</div>}
         </section>
-        <section className={`nav-group ${navExpanded.actividad ? "expanded" : ""}`}>
-          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, actividad: !value.actividad }))}><Activity/><span>Actividad</span><ChevronDown/></button>
-          {navExpanded.actividad && <div className="nav-submenu">{sidebarItem("registros", "Registros", FileText, records.filter(row => !["monitoring", "napa"].includes(effectiveRecordType(row))).length)}{sidebarItem("monitoreos", "Monitoreos", Eye, records.filter(row => effectiveRecordType(row) === "monitoring").length)}{sidebarItem("campanas", "Campañas", CalendarDays)}{sidebarItem("napas", "Napas", Waves)}</div>}
+        <section className={`nav-group ${navExpanded === "actividad" ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => value === "actividad" ? null : "actividad")}><Activity/><span>Actividad</span><ChevronDown/></button>
+          {navExpanded === "actividad" && <div className="nav-submenu">{sidebarItem("registros", "Registros", FileText, records.filter(row => !["monitoring", "napa"].includes(effectiveRecordType(row))).length)}{sidebarItem("monitoreos", "Monitoreos", Eye, records.filter(row => effectiveRecordType(row) === "monitoring").length)}{sidebarItem("campanas", "Campañas", CalendarDays)}{sidebarItem("napas", "Napas", Waves)}</div>}
         </section>
-        <section className={`nav-group ${navExpanded.mas ? "expanded" : ""}`}>
-          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => ({ ...value, mas: !value.mas }))}><Grid2X2/><span>Más</span><ChevronDown/></button>
-          {navExpanded.mas && <div className="nav-submenu">{sidebarItem("mas", "Más herramientas", Grid2X2)}{sidebarItem("configuracion", "Configuración", Settings2)}{sidebarItem("equipo", "Equipo y permisos", Users)}{sidebarItem("planes", "Planes", CreditCard)}{groupAdmin && sidebarItem("solicitudes", "Solicitudes", UserPlus)}{groupAdmin && sidebarItem("invitaciones", "Invitaciones", Link2)}{groupAdmin && sidebarItem("grupo", "Configuración del grupo", ShieldCheck)}<button className="nav-subitem" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button></div>}
+        <section className={`nav-group ${navExpanded === "mas" ? "expanded" : ""}`}>
+          <button className="nav-group-trigger" onClick={() => setNavExpanded(value => value === "mas" ? null : "mas")}><Grid2X2/><span>Más</span><ChevronDown/></button>
+          {navExpanded === "mas" && <div className="nav-submenu">{sidebarItem("mas", "Más herramientas", Grid2X2)}{sidebarItem("configuracion", "Configuración", Settings2)}{sidebarItem("equipo", "Equipo y permisos", Users)}{sidebarItem("planes", "Planes", CreditCard)}{groupAdmin && sidebarItem("solicitudes", "Solicitudes", UserPlus)}{groupAdmin && sidebarItem("invitaciones", "Invitaciones", Link2)}{groupAdmin && sidebarItem("grupo", "Configuración del grupo", ShieldCheck)}<button className="nav-subitem" onClick={() => { setGroupBrowserOpen(true); setSidebarOpen(false); }}><Search/><span>Buscar o sumar grupo</span><Plus/></button></div>}
         </section>
       </nav>
       <div className="sidebar-footer">
