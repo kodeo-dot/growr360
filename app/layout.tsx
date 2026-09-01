@@ -9,11 +9,11 @@ export const metadata: Metadata = {
   title: "Growr360 — Gestión agrícola inteligente",
   description: "Mapa, lotes, monitoreos, imágenes satelitales y gestión productiva en una sola plataforma.",
   icons: {
-    icon: [{ url: "/favicon.png", type: "image/png", sizes: "96x96" }],
-    shortcut: "/favicon.png",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
     apple: "/favicon.png"
   },
-  other: { "growr-release": "20" }
+  other: { "growr-release": "21" }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
