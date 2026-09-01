@@ -1,0 +1,74 @@
+/* Cierre visual de equipo, grupos y fichas completas. */
+.member-profile-page{width:100%;max-width:none!important;min-height:100%;margin:0!important;background:var(--paper)}
+.member-profile-page>*{width:min(1280px,100%);margin-left:auto;margin-right:auto}
+.member-profile-page>.page-back-button{display:flex;margin-bottom:14px}
+.member-profile-hero{min-height:132px;padding:22px 25px!important;border-radius:20px!important;background:var(--card)!important;box-shadow:none!important}
+.member-profile-hero>.profile-avatar{width:76px!important;height:76px!important;flex:0 0 76px;border-radius:50%!important;overflow:hidden}
+.member-profile-hero>.profile-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.member-profile-card{box-shadow:none!important}
+
+.page-content:has(>.team-grid){width:100%}
+.page-content:has(>.team-grid)>.page-head,.page-content:has(>.team-grid)>.team-shortcuts,.page-content:has(>.team-grid)>.team-section-title,.page-content:has(>.team-grid)>.team-grid{width:min(1180px,100%);margin-left:auto;margin-right:auto}
+.page-content:has(>.team-grid)>.team-shortcuts{margin-bottom:24px}
+.team-grid{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+.team-grid .member-card-button{width:100%;min-height:76px;padding:11px 14px!important;border-radius:15px!important;background:var(--card)!important;box-shadow:none!important;display:grid!important;grid-template-columns:52px minmax(170px,1fr) minmax(180px,.72fr) auto 20px!important;align-items:center;gap:12px;text-align:left;color:var(--ink)}
+.team-grid .member-card-button:hover{transform:none!important;background:color-mix(in srgb,var(--mint) 35%,var(--card))!important;box-shadow:none!important}
+.team-grid .member-card-button>.profile-avatar{grid-column:1;width:50px!important;height:50px!important;border-radius:50%!important;overflow:hidden}
+.team-grid .member-card-button>.profile-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.team-grid .member-card-button>div:nth-child(2){grid-column:2;min-width:0;align-self:center}
+.team-grid .member-card-button h3{margin:0!important;font-size:14px!important;line-height:1.15}
+.team-grid .member-card-button p{margin:4px 0 0!important;font-size:10px!important}
+.team-grid .member-card-button>.access{grid-column:3!important;min-width:0;padding:0!important;background:transparent!important;border-radius:0!important}
+.team-grid .member-card-button>.access small{font-size:8px}.team-grid .member-card-button>.access strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.team-grid .member-card-button>.member-active{grid-column:4;white-space:nowrap}
+.team-grid .member-card-button>svg{grid-column:5;width:17px;color:var(--green)}
+
+/* Buscar/crear grupo se siente como una pantalla de la app y deja disponible la navegación. */
+.group-browser-backdrop{z-index:40!important;inset:78px 0 0 240px!important;padding:0!important;overflow:hidden!important;background:var(--paper)!important;display:block!important}
+.group-browser{width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;padding:28px clamp(24px,3vw,48px) 42px!important;overflow:auto!important;border:0!important;border-radius:0!important;background:var(--paper)!important;box-shadow:none!important}
+.group-browser-head{margin-bottom:15px!important}.group-browser-head h2{font-size:27px!important}.group-browser-head p{font-size:11px!important}
+.group-browser-head .soft-button{border-radius:10px!important;box-shadow:none!important}
+.group-search{height:49px!important;margin-bottom:13px!important;border-radius:13px!important;box-shadow:none!important}
+.group-search button{height:37px!important;border-radius:9px!important;padding:0 17px!important}
+.group-browser-layout{gap:13px!important}.group-results,.group-detail{border-radius:17px!important;box-shadow:none!important}.group-result-card{min-height:72px!important}.group-result-image{width:50px!important;height:50px!important;border-radius:50%!important}.group-result-card{grid-template-columns:50px minmax(0,1fr) 18px!important}
+.group-detail-cover{height:160px!important}.group-detail-copy{padding-top:16px!important}.group-detail-copy h3{font-size:22px!important}
+
+.create-group-panel{max-width:920px!important;margin:12px auto 0!important;padding:20px!important;border-radius:18px!important;box-shadow:none!important;background:var(--card)!important}
+.create-group-intro{display:grid!important;grid-template-columns:116px minmax(0,1fr)!important;align-items:center;gap:18px;padding:17px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--mint) 36%,var(--card))}
+.create-group-image-preview{width:116px;height:116px;border-radius:18px;background:var(--deep);color:var(--bright);display:grid;place-items:center;overflow:hidden}
+.create-group-image-preview img{width:100%;height:100%;object-fit:cover}.create-group-image-preview svg{width:38px}
+.create-group-intro h3{margin:4px 0!important;font-size:21px!important}.create-group-intro p{font-size:11px;line-height:1.45}
+.create-group-image-button{width:max-content;margin-top:12px;padding:9px 12px;border:1px solid #85c6a0;border-radius:10px;background:var(--card);color:var(--green);display:flex!important;align-items:center;gap:7px;font-size:10px!important;font-weight:850;cursor:pointer}
+.create-group-image-button svg{width:16px}.create-group-image-button input{display:none!important}
+.create-group-panel>label{font-size:9px!important;letter-spacing:.02em}.create-group-panel input,.create-group-panel textarea{box-shadow:none!important}.create-group-panel .group-primary{min-width:150px!important;margin:0!important;width:auto!important}
+
+/* Selector activo compacto. */
+.sidebar-group-picker{min-height:48px!important;padding:6px 8px!important;border-radius:12px!important;gap:7px!important}
+.sidebar-group-picker>svg:first-child{width:17px!important}.sidebar-group-picker>span small{font-size:7px!important}.sidebar-group-picker select{min-height:30px!important;height:30px!important;padding:0 24px 0 0!important;border:0!important;background-color:transparent!important;background-position:right 1px center!important;box-shadow:none!important;font-size:10px!important}
+.sidebar-group-picker>svg:last-child{display:none}
+
+/* Solicitudes: bloque operativo compacto, no una lista de formulario genérica. */
+.team-subpage{min-height:100%;background:var(--paper)}
+.team-subpage>.page-back-button,.team-subpage>.page-head,.team-subpage>.team-requests,.team-subpage>.team-invitations,.team-subpage>.form-error,.team-subpage>.save-success{width:min(1080px,100%);margin-left:auto;margin-right:auto}
+.team-requests.standalone{padding:18px!important;border-radius:18px!important;box-shadow:none!important}
+.team-requests.standalone>header{padding:2px 2px 15px;margin-bottom:0!important;border-bottom:1px solid var(--line)}
+.team-requests.standalone article{min-height:76px;padding:11px 12px!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;background:transparent!important;grid-template-columns:46px minmax(0,1fr) auto!important}
+.team-requests.standalone article:last-child{border-bottom:0!important}
+.team-requests.standalone .member-avatar{width:44px;height:44px;border-radius:50%!important}
+.team-requests.standalone .request-actions button{min-height:35px!important;border-radius:9px!important}
+.team-requests.standalone .request-count{border-radius:50%!important}
+
+/* Fichas: fondo opaco completo y una jerarquía de lectura en dos columnas. */
+.record-detail-backdrop{z-index:40!important;background:var(--paper)!important;backdrop-filter:none!important;animation:none!important}
+.visual-record-detail{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:15px 17px;background:var(--paper)!important}
+.visual-record-detail>header,.visual-record-detail>.record-overview,.visual-record-detail>.record-inputs-section,.visual-record-detail>.observation-block,.visual-record-detail>.record-attachments{grid-column:1/-1;width:100%!important;margin:0 auto!important}
+.visual-record-detail>header{padding:3px 0 17px!important}.visual-record-detail>.record-overview{margin-bottom:2px!important}
+.visual-record-detail>section{min-width:0;margin-top:0!important;padding:17px;border:1px solid var(--line);border-radius:17px;background:var(--card)}
+.visual-record-detail>.record-inputs-section,.visual-record-detail>.observation-block,.visual-record-detail>.record-attachments{padding:18px}
+.visual-record-detail .detail-section-title{margin-bottom:12px}.visual-record-detail .detail-section-title h3{font-size:14px}.visual-record-detail .detail-section-title p{font-size:9px}
+.visual-record-detail .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.visual-record-detail .detail-grid>div{min-height:62px!important;padding:10px 12px!important}
+.visual-record-detail,.group-browser,.member-profile-page,.team-grid .member-card-button,.team-requests.standalone article{transition:none!important}
+
+@media(max-width:1050px){.group-browser-backdrop{left:82px!important}}
+@media(max-width:900px){.visual-record-detail{grid-template-columns:1fr}.visual-record-detail>section{grid-column:1}.visual-record-detail>.record-inputs-section,.visual-record-detail>.observation-block,.visual-record-detail>.record-attachments{grid-column:1}.team-grid .member-card-button{grid-template-columns:50px minmax(0,1fr) auto 18px!important}.team-grid .member-card-button>.access{grid-column:2!important;grid-row:2}.team-grid .member-card-button>.member-active{grid-column:3;grid-row:1/3}.team-grid .member-card-button>svg{grid-column:4;grid-row:1/3}.group-browser-layout{grid-template-columns:1fr!important}.group-detail{position:static!important}}
+@media(max-width:700px){.group-browser-backdrop{inset:64px 0 0!important}.group-browser{padding:14px 12px 28px!important}.group-browser-head>div:last-child .soft-button:not(.create-group-shortcut){display:none}.group-browser-head{align-items:center!important}.group-browser-head p{display:none}.group-search{height:46px!important}.create-group-intro{grid-template-columns:76px minmax(0,1fr)!important;padding:13px}.create-group-image-preview{width:76px;height:76px;border-radius:14px}.create-group-intro h3{font-size:17px!important}.create-group-intro p{display:none}.create-group-image-button{margin-top:7px;padding:7px 9px}.team-grid .member-card-button{grid-template-columns:46px minmax(0,1fr) 17px!important;padding:10px!important}.team-grid .member-card-button>.profile-avatar{width:44px!important;height:44px!important}.team-grid .member-card-button>.access{grid-column:2!important;grid-row:2}.team-grid .member-card-button>.member-active{display:none}.team-grid .member-card-button>svg{grid-column:3;grid-row:1/3}.team-requests.standalone article{grid-template-columns:42px 1fr!important}.team-requests.standalone .request-actions{grid-column:1/-1!important}.member-profile-hero>.profile-avatar{width:62px!important;height:62px!important;flex-basis:62px}.member-profile-hero{min-height:105px;padding:17px!important}.visual-record-detail .detail-grid{grid-template-columns:1fr!important}}

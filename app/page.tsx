@@ -1,6 +1,7 @@
 "use client";
 
 import "./landing-v3.css";
+import "./operations-refinement.css";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
@@ -524,7 +525,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
     </aside>
     <main>
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>{view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
+        <div className="topbar-left"><button className="icon-button hamburger" onClick={() => setSidebarOpen(true)}><Menu/></button><div><h1>{groupBrowserOpen ? "Grupos" : nav.find(n => n.id === view)?.label}</h1><p>{groupBrowserOpen ? "Buscar o crear un espacio de trabajo" : view === "mapa" ? group?.name ?? "Sin grupo activo" : view === "grupo" ? group?.name ?? "Grupo" : subtitle(view)}</p></div></div>
         <div className="topbar-actions"><div className={`sync-pill ${syncing ? "is-syncing" : ""}`}><span/>{syncing ? "Actualizando…" : "Sincronizado"}</div><button className="icon-button" onClick={() => groupId && void loadGroupData(groupId, true)} title="Actualizar"><RotateCcw className={syncing ? "spin" : ""}/></button><ProfileAvatar profile={profile} name={name} className="avatar-button"/></div>
       </header>
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
