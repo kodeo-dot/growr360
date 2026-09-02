@@ -569,6 +569,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [layer, setLayer] = useState<"cultivo" | "prioridad" | "sin-relleno">("cultivo");
   const [drawing, setDrawing] = useState(false);
   const [points, setPoints] = useState<number[][]>([]);
+  const draggedVertexRef = useRef<number | null>(null);
+  const suppressMapClickRef = useRef(false);
   const [draft, setDraft] = useState<GeoFeature | null>(null);
   const [importQueue,setImportQueue]=useState<GeoFeature[]>([]);
   const [recentOpen,setRecentOpen]=useState(false);
@@ -656,6 +658,15 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       type: "FeatureCollection",
       features: drawPoints.map((point, index) => ({ type: "Feature", properties: { index }, geometry: { type: "Point", coordinates: point } }))
     });
+    (map.getSource("midpoints") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: drawPoints.length < 2 ? [] : drawPoints.map((point, index) => {
+        const nextIndex = index + 1 < drawPoints.length ? index + 1 : (drawPoints.length >= 3 ? 0 : -1);
+        if (nextIndex < 0) return null;
+        const next = drawPoints[nextIndex];
+        return { type: "Feature", properties: { insertAfter: index }, geometry: { type: "Point", coordinates: [(point[0] + next[0]) / 2, (point[1] + next[1]) / 2] } };
+      }).filter(Boolean)
+    } as Parameters<GeoJSONSource["setData"]>[0]);
     (map.getSource("monitorings") as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
       features: monitoringRecords.map(row => {
@@ -687,6 +698,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addSource("plots", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("drawing", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("vertices", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("midpoints", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("monitorings", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("sentinel-image", { type: "image", url: transparentPixel(), coordinates: [[-60.3,-34.7],[-60.2,-34.7],[-60.2,-34.8],[-60.3,-34.8]] });
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
@@ -696,7 +708,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
       map.addLayer({ id: "draw-fill", type: "fill", source: "drawing", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#63dc42", "fill-opacity": .28 } });
       map.addLayer({ id: "draw-line", type: "line", source: "drawing", paint: { "line-color": "#a7ff79", "line-width": 3 } });
-      map.addLayer({ id: "draw-points", type: "circle", source: "vertices", paint: { "circle-radius": 6, "circle-color": "#f8fff4", "circle-stroke-color": "#1e7b45", "circle-stroke-width": 3 } });
+      map.addLayer({ id: "draw-midpoints", type: "circle", source: "midpoints", paint: { "circle-radius": 6, "circle-color": "#8bea68", "circle-opacity": .9, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+      map.addLayer({ id: "draw-points", type: "circle", source: "vertices", paint: { "circle-radius": 9, "circle-color": "#f8fff4", "circle-stroke-color": "#1e7b45", "circle-stroke-width": 3.5 } });
       refreshSources(map, []);
       const initiallySelected = selectedPlot ? mapPlots.find(plot => plot.id === selectedPlot.id) : null;
       if (initiallySelected) fitPlots(map, [initiallySelected]);
@@ -734,14 +747,76 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map?.loaded()) return;
     const click = (event: maplibregl.MapMouseEvent) => {
-      if (!drawing) return;
+      if (!drawing || suppressMapClickRef.current) return;
+      const handles = map.queryRenderedFeatures(event.point, { layers: ["draw-points", "draw-midpoints"] });
+      if (handles.length) return;
       setPoints(previous => [...previous, [event.lngLat.lng, event.lngLat.lat]]);
     };
+    const midpointClick = (event: maplibregl.MapLayerMouseEvent) => {
+      if (!drawing) return;
+      event.preventDefault();
+      event.originalEvent.stopPropagation();
+      suppressMapClickRef.current = true;
+      const insertAfter = Number(event.features?.[0]?.properties?.insertAfter);
+      if (!Number.isInteger(insertAfter)) return;
+      setPoints(previous => {
+        const next = [...previous];
+        next.splice(insertAfter + 1, 0, [event.lngLat.lng, event.lngLat.lat]);
+        return next;
+      });
+      window.setTimeout(() => { suppressMapClickRef.current = false; }, 0);
+    };
+    const vertexDown = (event: maplibregl.MapLayerMouseEvent) => {
+      if (!drawing) return;
+      event.preventDefault();
+      event.originalEvent.stopPropagation();
+      const index = Number(event.features?.[0]?.properties?.index);
+      if (!Number.isInteger(index)) return;
+      draggedVertexRef.current = index;
+      suppressMapClickRef.current = true;
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    };
+    const dragVertex = (event: maplibregl.MapMouseEvent) => {
+      const index = draggedVertexRef.current;
+      if (index === null) return;
+      setPoints(previous => previous.map((point, pointIndex) => pointIndex === index ? [event.lngLat.lng, event.lngLat.lat] : point));
+    };
+    const endVertexDrag = () => {
+      if (draggedVertexRef.current === null) return;
+      draggedVertexRef.current = null;
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = drawing ? "crosshair" : "";
+      window.setTimeout(() => { suppressMapClickRef.current = false; }, 0);
+    };
+    const handleEnter = () => { if (draggedVertexRef.current === null) map.getCanvas().style.cursor = "grab"; };
+    const handleLeave = () => { if (draggedVertexRef.current === null) map.getCanvas().style.cursor = drawing ? "crosshair" : ""; };
     map.on("click", click);
+    map.on("click", "draw-midpoints", midpointClick);
+    map.on("mousedown", "draw-points", vertexDown);
+    map.on("mousemove", dragVertex);
+    map.on("mouseup", endVertexDrag);
+    map.on("mouseenter", "draw-points", handleEnter);
+    map.on("mouseenter", "draw-midpoints", handleEnter);
+    map.on("mouseleave", "draw-points", handleLeave);
+    map.on("mouseleave", "draw-midpoints", handleLeave);
     map.getCanvas().style.cursor = drawing ? "crosshair" : "";
-    return () => { map.off("click", click); if (map.getCanvas()) map.getCanvas().style.cursor = ""; };
+    return () => {
+      map.off("click", click);
+      map.off("click", "draw-midpoints", midpointClick);
+      map.off("mousedown", "draw-points", vertexDown);
+      map.off("mousemove", dragVertex);
+      map.off("mouseup", endVertexDrag);
+      map.off("mouseenter", "draw-points", handleEnter);
+      map.off("mouseenter", "draw-midpoints", handleEnter);
+      map.off("mouseleave", "draw-points", handleLeave);
+      map.off("mouseleave", "draw-midpoints", handleLeave);
+      draggedVertexRef.current = null;
+      if (!map.dragPan.isEnabled()) map.dragPan.enable();
+      if (map.getCanvas()) map.getCanvas().style.cursor = "";
+    };
   }, [drawing]);
 
   useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current, points); }, [points, refreshSources]);
@@ -1421,8 +1496,29 @@ const permissionCatalog=[
 function roleDefault(role:string,permission:string){if(role==="owner")return true;if(role==="admin")return true;if(role==="agronomist")return ["view_fields","view_records","create_records","edit_records","create_monitoring","view_satellite","view_ndvi","export_reports"].includes(permission);if(role==="operator")return ["view_fields","view_records","create_records","create_monitoring"].includes(permission);return ["view_fields","view_records"].includes(permission)}
 function MemberDetailPage({member,fields,plots,canManage,busy,draft,setDraft,fieldIds,setFieldIds,plotIds,setPlotIds,onBack,onRole,onRemove,onSave}:{member:Member;fields:Field[];plots:Plot[];canManage:boolean;busy:string;draft:Record<string,boolean>;setDraft:(value:Record<string,boolean>)=>void;fieldIds:Set<string>;setFieldIds:(value:Set<string>)=>void;plotIds:Set<string>;setPlotIds:(value:Set<string>)=>void;onBack:()=>void;onRole:(role:string)=>void;onRemove:()=>void;onSave:()=>void}){
   const profile=relation(member.profiles);const memberName=[profile?.first_name,profile?.last_name].filter(Boolean).join(" ")||profile?.username||"Usuario";const editable=canManage&&member.role!=="owner";
-  const toggle=(set:Set<string>,id:string,change:(value:Set<string>)=>void)=>{const next=new Set(set);if(next.has(id))next.delete(id);else next.add(id);change(next)};
-  return <div className="page-content member-profile-page"><button className="page-back-button" onClick={onBack}><ChevronLeft/>Volver al equipo</button><section className="member-profile-hero"><ProfileAvatar profile={profile} name={memberName}/><div><span className="eyebrow">INTEGRANTE DEL EQUIPO</span><h2>{memberName}</h2><p>{roleName(member.role)} · <i/>Activo</p></div></section><div className="member-profile-layout"><section className="member-profile-card contact-card"><header><div><span className="eyebrow">CONTACTO</span><h3>Datos de la persona</h3></div><ContactRound/></header><div className="member-contact-list"><div><Mail/><span><small>Correo</small><strong>{profile?.email||"No informado"}</strong></span></div><div><Phone/><span><small>Teléfono</small><strong>{profile?.phone||"No informado"}</strong></span></div><div><CircleUserRound/><span><small>Usuario</small><strong>{profile?.username?`@${profile.username}`:"No informado"}</strong></span></div></div></section><section className="member-profile-card role-card"><header><div><span className="eyebrow">ROL</span><h3>Acceso general</h3></div><ShieldCheck/></header><label>Rol dentro del grupo<select disabled={!editable||busy===member.user_id} value={member.role} onChange={event=>onRole(event.target.value)}>{["admin","agronomist","operator","monitor","producer","member"].map(item=><option key={item} value={item}>{roleName(item)}</option>)}</select></label><p>El rol define la base de permisos. Los ajustes de abajo permiten afinar el acceso.</p></section></div><section className="member-profile-card resource-access-card"><header><div><span className="eyebrow">ALCANCE DE TRABAJO</span><h3>Campos y lotes asignados</h3><p>Definí dónde puede trabajar esta persona. Si no seleccionás recursos, conservará el alcance general de su rol.</p></div><MapPin/></header><div className="resource-access-columns"><div><h4>Campos</h4><div className="resource-check-list">{fields.map(field=><label key={field.id}><input type="checkbox" disabled={!editable} checked={fieldIds.has(field.id)} onChange={()=>toggle(fieldIds,field.id,setFieldIds)}/><span><strong>{field.name}</strong><small>{number(field.total_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</small></span></label>)}{!fields.length&&<small>No hay campos para asignar.</small>}</div></div><div><h4>Lotes específicos</h4><div className="resource-check-list">{plots.map(plot=><label key={plot.id}><input type="checkbox" disabled={!editable} checked={plotIds.has(plot.id)} onChange={()=>toggle(plotIds,plot.id,setPlotIds)}/><span><strong>{plot.name}</strong><small>{relation(plot.fields)?.name||"Campo sin nombre"}</small></span></label>)}{!plots.length&&<small>No hay lotes para asignar.</small>}</div></div></div></section><section className="member-profile-card permissions-card"><header><div><span className="eyebrow">PERMISOS</span><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p></div><Settings2/></header><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!editable} checked={Boolean(draft[key])} onChange={event=>setDraft({...draft,[key]:event.target.checked})}/></label>)}</div></section>{editable&&<footer className="member-profile-actions"><button className="danger-button" onClick={onRemove}>Quitar del grupo</button><button className="settings-save" disabled={busy===member.user_id} onClick={onSave}>{busy===member.user_id?<LoaderCircle className="spin"/>:<Save/>}Guardar cambios</button></footer>}</div>
+  const [openFields,setOpenFields]=useState<Set<string>>(new Set());
+  const plotsFor=(fieldId:string)=>plots.filter(plot=>plot.field_id===fieldId);
+  const fieldState=(field:Field)=>{const children=plotsFor(field.id);const selected=fieldIds.has(field.id)?children.length:children.filter(plot=>plotIds.has(plot.id)).length;return{children,selected,full:fieldIds.has(field.id)||(children.length>0&&selected===children.length),partial:!fieldIds.has(field.id)&&selected>0&&selected<children.length}};
+  const toggleOpen=(fieldId:string)=>setOpenFields(current=>{const next=new Set(current);if(next.has(fieldId))next.delete(fieldId);else next.add(fieldId);return next});
+  const toggleField=(field:Field,checked:boolean)=>{const nextFields=new Set(fieldIds);const nextPlots=new Set(plotIds);const children=plotsFor(field.id);if(checked)nextFields.add(field.id);else nextFields.delete(field.id);children.forEach(plot=>nextPlots.delete(plot.id));setFieldIds(nextFields);setPlotIds(nextPlots)};
+  const togglePlot=(field:Field,plot:Plot,checked:boolean)=>{const children=plotsFor(field.id);const nextFields=new Set(fieldIds);const nextPlots=new Set(plotIds);if(nextFields.has(field.id)){nextFields.delete(field.id);children.forEach(child=>{if(child.id!==plot.id||checked)nextPlots.add(child.id)});}else if(checked)nextPlots.add(plot.id);else nextPlots.delete(plot.id);if(children.length&&children.every(child=>nextPlots.has(child.id))){nextFields.add(field.id);children.forEach(child=>nextPlots.delete(child.id));}setFieldIds(nextFields);setPlotIds(nextPlots)};
+  const selectEverything=()=>{setFieldIds(new Set(fields.map(field=>field.id)));setPlotIds(new Set())};
+  const clearEverything=()=>{setFieldIds(new Set());setPlotIds(new Set())};
+  return <div className="page-content member-profile-page">
+    <button className="page-back-button" onClick={onBack}><ChevronLeft/>Volver al equipo</button>
+    <section className="member-profile-hero"><ProfileAvatar profile={profile} name={memberName}/><div><span className="eyebrow">INTEGRANTE DEL EQUIPO</span><h2>{memberName}</h2><p>{roleName(member.role)} · <i/>Activo</p></div></section>
+    <div className="member-profile-layout">
+      <section className="member-profile-card contact-card"><header><div><span className="eyebrow">CONTACTO</span><h3>Datos de la persona</h3></div><ContactRound/></header><div className="member-contact-list"><div><Mail/><span><small>Correo</small><strong>{profile?.email||"No informado"}</strong></span></div><div><Phone/><span><small>Teléfono</small><strong>{profile?.phone||"No informado"}</strong></span></div><div><CircleUserRound/><span><small>Usuario</small><strong>{profile?.username?`@${profile.username}`:"No informado"}</strong></span></div></div></section>
+      <section className="member-profile-card role-card"><header><div><span className="eyebrow">ROL</span><h3>Acceso general</h3></div><ShieldCheck/></header><label>Rol dentro del grupo<select disabled={!editable||busy===member.user_id} value={member.role} onChange={event=>onRole(event.target.value)}>{["admin","agronomist","operator","monitor","producer","member"].map(item=><option key={item} value={item}>{roleName(item)}</option>)}</select></label><p>El rol define la base de permisos. Los ajustes de abajo permiten afinar el acceso.</p></section>
+    </div>
+    <section className="member-profile-card resource-access-card">
+      <header><div><span className="eyebrow">ALCANCE DE TRABAJO</span><h3>Campos y lotes asignados</h3><p>Abrí un campo para elegir todos sus lotes o solamente los que correspondan.</p></div><MapPin/></header>
+      <div className="resource-access-toolbar"><div><strong>{fieldIds.size+plotIds.size}</strong><span>asignaciones directas</span></div><button type="button" disabled={!editable} onClick={selectEverything}><Check/>Seleccionar todo</button><button type="button" disabled={!editable} onClick={clearEverything}><X/>Limpiar</button></div>
+      <div className="resource-tree">{fields.map(field=>{const state=fieldState(field);const open=openFields.has(field.id);return <article key={field.id} className={state.full?"is-selected":state.partial?"is-partial":""}><div className="resource-field-row"><label><input ref={input=>{if(input)input.indeterminate=state.partial}} type="checkbox" disabled={!editable} checked={state.full} onChange={event=>toggleField(field,event.target.checked)}/><span><strong>{field.name}</strong><small>{state.full?"Campo completo":state.selected?`${state.selected} de ${state.children.length} lotes`:`${state.children.length} lote${state.children.length===1?"":"s"}`}</small></span></label><button type="button" onClick={()=>toggleOpen(field.id)} aria-expanded={open} aria-label={`${open?"Cerrar":"Abrir"} ${field.name}`}><ChevronDown/></button></div>{open&&<div className="resource-lot-list">{state.children.map(plot=>{const checked=fieldIds.has(field.id)||plotIds.has(plot.id);return <label key={plot.id}><input type="checkbox" disabled={!editable} checked={checked} onChange={event=>togglePlot(field,plot,event.target.checked)}/><span><strong>{plot.name}</strong><small>{number(plot.arable_area||plot.total_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</small></span></label>})}{!state.children.length&&<small>Este campo todavía no tiene lotes.</small>}</div>}</article>})}{!fields.length&&<div className="resource-tree-empty">No hay campos para asignar.</div>}</div>
+    </section>
+    <section className="member-profile-card permissions-card"><header><div><span className="eyebrow">PERMISOS</span><h3>Permisos personalizados</h3><p>Estos cambios tienen prioridad sobre los permisos predeterminados del rol.</p></div><Settings2/></header><div className="permission-grid">{permissionCatalog.map(([key,label])=><label key={key}><span>{label}</span><input type="checkbox" disabled={!editable} checked={Boolean(draft[key])} onChange={event=>setDraft({...draft,[key]:event.target.checked})}/></label>)}</div></section>
+    {editable&&<footer className="member-profile-actions"><button className="danger-button" onClick={onRemove}>Quitar del grupo</button><button className="settings-save" disabled={busy===member.user_id} onClick={onSave}>{busy===member.user_id?<LoaderCircle className="spin"/>:<Save/>}Guardar cambios</button></footer>}
+  </div>
 }
 function RealTeamView({ section, groupId, members, fields, plots, currentRole, canManage, onSection, onSaved }: { section:"members"|"requests"|"invitations"; groupId:string; members: Member[]; fields:Field[];plots:Plot[];currentRole:string; canManage:boolean; onSection:(view:View)=>void; onSaved:()=>void }) {
   const [busy,setBusy]=useState("");const [message,setMessage]=useState("");const [selected,setSelected]=useState<Member|null>(null);const [draft,setDraft]=useState<Record<string,boolean>>({});const [resourceFieldIds,setResourceFieldIds]=useState<Set<string>>(new Set());const [resourcePlotIds,setResourcePlotIds]=useState<Set<string>>(new Set());
