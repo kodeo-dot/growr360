@@ -1121,16 +1121,30 @@ function PlantingProgressReport({records,plots,crops,campaigns,onBack}:{records:
     const fromRecords=records.map(row=>({id:row.campaign_id||relation(row.campaigns)?.id||"",name:relation(row.campaigns)?.name||""})).filter(item=>item.id&&item.name);
     return Array.from(new globalThis.Map([...campaigns.map(item=>[item.id,{id:item.id,name:item.name}] as const),...fromRecords.map(item=>[item.id,item] as const)]).values());
   },[campaigns,records]);
-  const cropOptions=useMemo(()=>Array.from(new Set([...crops.map(item=>item.name),...records.map(recordCrop)].filter(Boolean))).sort((a,b)=>a.localeCompare(b,"es")),[crops,records]);
   const[campaignId,setCampaignId]=useState("");
   const[crop,setCrop]=useState("");
+  const cropOptions=useMemo(()=>{
+    if(!campaignId)return[];
+    const catalogNames=new globalThis.Map(crops.map(item=>[normalizeText(item.name),item.name]));
+    const campaignCrops=new globalThis.Map<string,string>();
+    records.filter(row=>(row.campaign_id||relation(row.campaigns)?.id)===campaignId&&effectiveRecordType(row)==="sowing").forEach(row=>{
+      const recordedName=recordCrop(row).trim();
+      if(!recordedName)return;
+      const normalized=normalizeText(recordedName);
+      campaignCrops.set(normalized,catalogNames.get(normalized)??recordedName);
+    });
+    return Array.from(campaignCrops.values()).sort((a,b)=>a.localeCompare(b,"es"));
+  },[campaignId,crops,records]);
   useEffect(()=>{if(!campaignId&&campaignOptions.length)setCampaignId(campaignOptions[0].id)},[campaignId,campaignOptions]);
-  useEffect(()=>{if(!crop&&cropOptions.length)setCrop(cropOptions[0])},[crop,cropOptions]);
+  useEffect(()=>{
+    const selectedIsAvailable=cropOptions.some(item=>normalizeText(item)===normalizeText(crop));
+    if(!selectedIsAvailable)setCrop(cropOptions[0]??"");
+  },[crop,cropOptions]);
   const report=useMemo(()=>buildPlantingProgress(records,plots,campaignId,crop),[records,plots,campaignId,crop]);
   const current=report.points.at(-1)?.accumulated??0;
   const percentage=report.total>0?Math.min(100,current/report.total*100):0;
   return <div className="page-content planting-progress-page"><PageHead title="Avance de siembra" text="Evolución acumulada diaria, sin duplicar la superficie de un lote por tener varios registros." action={<button className="soft-button report-back" onClick={onBack}><ChevronLeft/>Todos los reportes</button>}/>
-    <section className="planting-selector-card"><div><span><Sprout/></span><div><h3>Elegí qué querés seguir</h3><p>El total se calcula una sola vez por lote, usando su superficie sembrable.</p></div></div><div className="planting-selectors"><label><span>Campaña</span><select value={campaignId} onChange={event=>setCampaignId(event.target.value)}>{campaignOptions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Cultivo</span><select value={crop} onChange={event=>setCrop(event.target.value)}>{cropOptions.map(item=><option key={item} value={item}>{item}</option>)}</select></label></div></section>
+    <section className="planting-selector-card"><div><span><Sprout/></span><div><h3>Elegí qué querés seguir</h3><p>El total se calcula una sola vez por lote, usando su superficie sembrable.</p></div></div><div className="planting-selectors"><label><span>Campaña</span><select value={campaignId} onChange={event=>setCampaignId(event.target.value)}>{campaignOptions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Cultivo</span><select value={crop} disabled={!cropOptions.length} onChange={event=>setCrop(event.target.value)}>{cropOptions.length?cropOptions.map(item=><option key={item} value={item}>{item}</option>):<option value="">Sin cultivos con siembras</option>}</select></label></div></section>
     <div className="planting-kpis"><article><small>Sembrado acumulado</small><strong>{current.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><span>al último día registrado</span></article><article><small>Superficie sembrable total</small><strong>{report.total.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><span>{report.plotCount} lote{report.plotCount===1?"":"s"}, sin duplicados</span></article><article className="planting-percent"><small>Avance</small><strong>{percentage.toLocaleString("es-AR",{maximumFractionDigits:1})}%</strong><span>{current.toLocaleString("es-AR",{maximumFractionDigits:2})} de {report.total.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</span></article></div>
     <section className="chart-card planting-chart-card"><div className="chart-head"><div><h3>Superficie acumulada día por día</h3><p>{crop||"Cultivo"} · {campaignOptions.find(item=>item.id===campaignId)?.name||"Campaña"}</p></div><span className="planting-chart-unit">ha / % del total</span></div><PlantingProgressChart points={report.points} total={report.total}/></section>
     <section className="content-card planting-daily"><div className="detail-section-title"><CalendarDays/><div><h3>Detalle diario</h3><p>Cada fecha conserva la resolución diaria aunque ese día no haya nuevas hectáreas.</p></div></div>{report.points.length?<div className="planting-daily-grid">{report.points.map(point=><article key={point.date}><time>{formatShortDay(point.date)}</time><span className={point.daily>0?"has-progress":""}>{point.daily>0?`+${point.daily.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"Sin nuevas ha"}</span><strong>{point.accumulated.toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong><small>{point.percent.toLocaleString("es-AR",{maximumFractionDigits:1})}%</small></article>)}</div>:<EmptyLine text="No hay siembras cargadas para esta campaña y cultivo."/>}</section>
@@ -1141,14 +1155,14 @@ function buildPlantingProgress(records:RecordRow[],plots:Plot[],campaignId:strin
   if(!campaignId||!crop)return{total:0,plotCount:0,points:[] as PlantingProgressPoint[]};
   const normalizedCrop=normalizeText(crop);
   const campaignRecords=records.filter(row=>(row.campaign_id||relation(row.campaigns)?.id)===campaignId&&row.plot_id);
-  const latestCropRecord=new globalThis.Map<string,RecordRow>();
-  campaignRecords.filter(row=>recordCrop(row)).forEach(row=>{const current=latestCropRecord.get(row.plot_id!);if(!current||recordSortKey(row)>recordSortKey(current))latestCropRecord.set(row.plot_id!,row)});
-  const eligiblePlots=plots.filter(plot=>{const latest=latestCropRecord.get(plot.id);return Boolean(latest&&normalizeText(recordCrop(latest))===normalizedCrop)});
+  const cropSowings=campaignRecords.filter(row=>effectiveRecordType(row)==="sowing"&&normalizeText(recordCrop(row))===normalizedCrop);
+  const eligiblePlotIds=new Set(cropSowings.map(row=>row.plot_id!));
+  const eligiblePlots=plots.filter(plot=>eligiblePlotIds.has(plot.id));
   const plotAreas=new globalThis.Map(eligiblePlots.map(plot=>[plot.id,Math.max(0,number(plot.arable_area)||number(plot.total_area))]));
   const total=sum(Array.from(plotAreas.values()));
   const remaining=new globalThis.Map(plotAreas);
   const daily=new globalThis.Map<string,number>();
-  campaignRecords.filter(row=>effectiveRecordType(row)==="sowing"&&normalizeText(recordCrop(row))===normalizedCrop&&plotAreas.has(row.plot_id!)).sort((a,b)=>recordSortKey(a).localeCompare(recordSortKey(b))).forEach(row=>{
+  cropSowings.filter(row=>plotAreas.has(row.plot_id!)).sort((a,b)=>recordSortKey(a).localeCompare(recordSortKey(b))).forEach(row=>{
     const available=remaining.get(row.plot_id!)??0;if(available<=0)return;
     const requested=number(row.worked_area)>0?number(row.worked_area):available;
     const contribution=Math.min(available,requested);remaining.set(row.plot_id!,available-contribution);
