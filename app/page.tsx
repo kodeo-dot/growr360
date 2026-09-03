@@ -77,8 +77,8 @@ type ResolvedAttachment = RecordAttachment & { url:string };
 type Supply = { id:string; name:string; category:string; unit:string; unit_price:number|string; currency:string };
 type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
 type SubscriptionPlan = { code:"free"|"pro"|"business";name:string;max_hectares:number|null;max_fields:number|null;max_lots:number|null;max_users:number|null;max_kml_imports:number|null;features:string[] };
-type UserSubscription = { id:string;user_id:string;plan:"free"|"pro"|"business";status:"active"|"trialing"|"expired"|"cancelled";started_at:string;expires_at?:string|null };
-type SubscriptionUsage = { user_id:string;kml_imports:number;updated_at:string };
+type GroupSubscription = { id:string;group_id:string;plan:"free"|"pro"|"business";status:"active"|"trialing"|"expired"|"cancelled";started_at:string;expires_at?:string|null };
+type GroupSubscriptionUsage = { group_id:string;kml_imports:number;updated_at:string };
 type MemberResourceAccess = { field_id?: string | null; lot_id?: string | null };
 type Member = { user_id: string; role: string; status: string; profiles?: Profile | null; member_permission_overrides?: PermissionOverride[] | null; member_resource_access?: MemberResourceAccess[] | null };
 type GeoFeature = {
@@ -386,8 +386,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [groupBrowserOpen, setGroupBrowserOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<"gestion" | "actividad" | "mas" | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
-  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsage | null>(null);
+  const [subscription, setSubscription] = useState<GroupSubscription | null>(null);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<GroupSubscriptionUsage | null>(null);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
   const selectedPlot = plots.find(plot => plot.id === selectedPlotId) ?? null;
@@ -413,7 +413,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const loadGroupData = useCallback(async (targetGroup: string, quiet = false) => {
     if (quiet) setSyncing(true);
     setError("");
-    const [fieldResult, plotResult, recordResult, memberResult, cropResult, assignmentResult, colorResult, settingsResult, campaignResult, clientResult, supplyResult,contractorResult] = await Promise.all([
+    const [fieldResult, plotResult, recordResult, memberResult, cropResult, assignmentResult, colorResult, settingsResult, campaignResult, clientResult, supplyResult,contractorResult,subscriptionResult,usageResult] = await Promise.all([
       supabase.from("fields").select("id,group_id,name,total_area,arable_area,locality,province").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("plots").select("id,group_id,field_id,name,total_area,arable_area,geometry_json,priority_color,allow_member_edits,fields(name)").eq("group_id", targetGroup).is("deleted_at", null).order("name"),
       supabase.from("records").select("id,record_type,record_date,worked_area,contractor,machinery_text,observations,created_at,field_id,plot_id,campaign_id,fields(name),plots(name),campaigns(id,name),sowing_records(data),spraying_records(data),fertilization_records(data),harvest_records(data),work_records(data),monitoring_records(data),expense_records(data),other_records(data)").eq("group_id", targetGroup).is("deleted_at", null).order("record_date", { ascending: false }).limit(500),
@@ -426,6 +426,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
       ,supabase.from("clients").select("id,name,cuit,phone,email").eq("group_id", targetGroup).is("deleted_at", null).order("name")
       ,supabase.from("inputs").select("id,name,category,unit,unit_price,currency").eq("group_id", targetGroup).is("deleted_at", null).order("name")
       ,supabase.from("contractors").select("id,group_id,name,phone,document,address,notes").eq("group_id",targetGroup).is("deleted_at",null).order("name")
+      ,supabase.from("group_subscriptions").select("id,group_id,plan,status,started_at,expires_at").eq("group_id",targetGroup).maybeSingle()
+      ,supabase.from("group_subscription_usage").select("group_id,kml_imports,updated_at").eq("group_id",targetGroup).maybeSingle()
     ]);
     const criticalError = fieldResult.error ?? plotResult.error ?? recordResult.error;
     if (criticalError) setError(criticalError.message);
@@ -441,6 +443,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
     setClients((clientResult.data ?? []) as ClientRow[]);
     setSupplies((supplyResult.data ?? []) as Supply[]);
     setContractors((contractorResult.data??[]) as Contractor[]);
+    setSubscription((subscriptionResult.data as GroupSubscription|null)??null);
+    setSubscriptionUsage((usageResult.data as GroupSubscriptionUsage|null)??null);
     setSyncing(false);
   }, [session.user.id]);
 
@@ -448,17 +452,13 @@ function AuthenticatedApp({ session }: { session: Session }) {
     setLoading(true);
     setError("");
     const userId = session.user.id;
-    const [profileResult, membershipResult, plansResult, subscriptionResult, usageResult] = await Promise.all([
+    const [profileResult, membershipResult, plansResult] = await Promise.all([
       supabase.from("profiles").select("id,first_name,last_name,username,email,phone,avatar_path").eq("id", userId).single(),
       supabase.from("group_members").select("group_id,role,status,groups(id,name,description,cuit,image_path),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at"),
-      supabase.from("subscription_plans").select("code,name,max_hectares,max_fields,max_lots,max_users,max_kml_imports,features"),
-      supabase.from("user_subscriptions").select("id,user_id,plan,status,started_at,expires_at").eq("user_id", userId).maybeSingle(),
-      supabase.from("subscription_usage").select("user_id,kml_imports,updated_at").eq("user_id", userId).maybeSingle()
+      supabase.from("subscription_plans").select("code,name,max_hectares,max_fields,max_lots,max_users,max_kml_imports,features")
     ]);
     if (profileResult.data) setProfile(profileResult.data as Profile);
     setPlans((plansResult.data ?? []) as SubscriptionPlan[]);
-    setSubscription((subscriptionResult.data as UserSubscription | null) ?? null);
-    setSubscriptionUsage((usageResult.data as SubscriptionUsage | null) ?? null);
     if (membershipResult.error) {
       setError(membershipResult.error.message);
       setLoading(false); return;
@@ -473,6 +473,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       await loadGroupData(nextGroup);
     } else {
       setFields([]); setPlots([]); setRecords([]); setMembers([]);
+      setSubscription(null);setSubscriptionUsage(null);
     }
     setLoading(false);
   }, [loadGroupData, session.user.id]);
@@ -549,7 +550,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "solicitudes" && <RealTeamView section="requests" groupId={groupId} members={members} fields={fields} plots={plots} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "invitaciones" && <RealTeamView section="invitations" groupId={groupId} members={members} fields={fields} plots={plots} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "mas" && <MoreView canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")} onOpenGroupSettings={()=>setView("grupo")} onOpenPlans={()=>setView("planes")}/>}
-        {view === "planes" && <PlansView plans={plans} subscription={subscription} usage={subscriptionUsage} fields={fields} plots={plots} members={members}/>} 
+        {view === "planes" && <PlansView plans={plans} subscription={subscription} usage={subscriptionUsage} fields={fields} plots={plots} members={members} groupName={group?.name??"Grupo activo"}/>} 
         {view === "configuracion" && <RealSettingsView mode="personal" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {view === "grupo" && <RealSettingsView mode="group" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} contractors={contractors} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
@@ -843,7 +844,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       }else kml=await file.text();
       const features=kmlFeatures(kml);
       if(!features.length)throw new Error("No encontramos polígonos de lotes en el archivo.");
-      const claim=await supabase.rpc("claim_kml_import");
+      const claim=await supabase.rpc("claim_kml_import",{p_group_id:groupId});
       if(claim.error)throw new Error(claim.error.message);
       setSelectedPlot(null);setImportQueue(features.slice(1));setDraft(features[0]);setDrawing(false);
     }catch(reason){setSatelliteError(reason instanceof Error?reason.message:"No se pudo importar el archivo.");}
@@ -1335,7 +1336,7 @@ function MoreView({canManageGroup,onOpenTeam,onOpenSettings,onOpenGroupSettings,
   return <div className="page-content"><PageHead title="Más" text="Cuenta, configuración y administración."/><div className="more-tools-clean"><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button><button className="more-option" onClick={onOpenPlans}><CreditCard/><div><strong>Planes Growr</strong><small>Plan actual, límites y funciones</small></div><ChevronRight/></button>{canManageGroup&&<button className="more-option" onClick={onOpenGroupSettings}><ShieldCheck/><div><strong>Configuración del grupo</strong><small>Identidad, foto y datos institucionales</small></div><ChevronRight/></button>}<button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Ajustes personales</strong><small>Unidades, fechas y notificaciones</small></div><ChevronRight/></button></div></div>
 }
 
-function PlansView({plans,subscription,usage,fields,plots,members}:{plans:SubscriptionPlan[];subscription:UserSubscription|null;usage:SubscriptionUsage|null;fields:Field[];plots:Plot[];members:Member[]}){
+function PlansView({plans,subscription,usage,fields,plots,members,groupName}:{plans:SubscriptionPlan[];subscription:GroupSubscription|null;usage:GroupSubscriptionUsage|null;fields:Field[];plots:Plot[];members:Member[];groupName:string}){
   const validSubscription=subscription&&["active","trialing"].includes(subscription.status)&&(!subscription.expires_at||new Date(subscription.expires_at)>new Date());
   const currentCode=validSubscription?subscription.plan:"free";
   const ordered=["free","pro","business"].map(code=>plans.find(plan=>plan.code===code)).filter(Boolean) as SubscriptionPlan[];
@@ -1350,8 +1351,8 @@ function PlansView({plans,subscription,usage,fields,plots,members}:{plans:Subscr
   ];
   const featureNames:Record<string,string>={campaigns:"Campañas",records:"Registros y monitoreos",tasks:"Tareas",map:"Mapa productivo",plot_drawing:"Trazado de lotes",satellite_latest_ndvi:"Última imagen NDVI",satellite_history:"Historial satelital",satellite_comparison:"Comparación satelital",satellite_alerts:"Alertas satelitales",advanced_analytics:"Analítica avanzada",exports:"Exportaciones",advanced_roles:"Roles avanzados",enterprise:"Operación empresarial"};
   const planText=(plan:SubscriptionPlan)=>plan.code==="free"?"Para empezar a ordenar la operación":plan.code==="pro"?"Para productores y equipos en crecimiento":"Para operaciones sin límites";
-  return <div className="page-content plans-page"><PageHead title="Planes Growr" text="Consultá tu plan, los límites disponibles y el uso actual de tu cuenta."/>
-    <section className="plan-current"><div><span><ShieldCheck/></span><div><small>PLAN ACTUAL</small><h3>{current?.name??"Growr Free"}</h3><p>{subscription?.status==="trialing"?"Período de prueba activo":"Tu información y tus límites se sincronizan con la app."}</p></div></div>{subscription?.expires_at&&<time>Vigente hasta {formatDate(subscription.expires_at)}</time>}</section>
+  return <div className="page-content plans-page"><PageHead title="Planes Growr" text={`Funciones y límites de la organización ${groupName}.`}/>
+    <section className="plan-current"><div><span><ShieldCheck/></span><div><small>PLAN DEL GRUPO · {groupName}</small><h3>{current?.name??"Growr Free"}</h3><p>{subscription?.status==="trialing"?"Período de prueba activo para todo el grupo":"Todos los miembros acceden a estas funciones; sus acciones dependen del rol."}</p></div></div>{subscription?.expires_at&&<time>Vigente hasta {formatDate(subscription.expires_at)}</time>}</section>
     <section className="plan-usage"><header><div><h3>Uso del plan</h3><p>Los límites se aplican igual en la web y en la aplicación.</p></div><span>{currentCode.toUpperCase()}</span></header><div>{metrics.map(metric=>{const percent=metric.limit==null?0:Math.min(100,(metric.value/Math.max(1,metric.limit))*100);return <article key={metric.label}><div><strong>{metric.label}</strong><span>{metric.value.toLocaleString("es-AR",{maximumFractionDigits:2})}{metric.suffix??""} de {metric.limit==null?"Ilimitado":`${metric.limit.toLocaleString("es-AR")}${metric.suffix??""}`}</span></div><div className={metric.limit!=null&&percent>=90?"near-limit":""}><i style={{width:metric.limit==null?"100%":`${percent}%`}}/></div></article>})}</div></section>
     <div className="plans-grid">{ordered.map(plan=><article key={plan.code} className={`${plan.code===currentCode?"current":""} ${plan.code}`}><header><div><span>{plan.code==="free"?<Leaf/>:plan.code==="pro"?<TrendingUp/>:<BriefcaseBusiness/>}</span><div><small>{plan.code==="free"?"INICIAL":plan.code==="pro"?"PROFESIONAL":"EMPRESA"}</small><h3>{plan.name}</h3><p>{planText(plan)}</p></div></div>{plan.code===currentCode&&<b>Tu plan</b>}</header><div className="plan-limits"><span>{plan.max_hectares==null?"Hectáreas ilimitadas":`Hasta ${plan.max_hectares.toLocaleString("es-AR")} ha`}</span><span>{plan.max_fields==null?"Campos y lotes ilimitados":`${plan.max_fields} campo y ${plan.max_lots} lotes`}</span><span>{plan.max_users==null?"Usuarios ilimitados":`Hasta ${plan.max_users} usuario${plan.max_users===1?"":"s"}`}</span><span>{plan.max_kml_imports==null?"Importaciones ilimitadas":`${plan.max_kml_imports} importación KML/KMZ`}</span></div><ul>{plan.features.map(feature=><li key={feature}><Check/>{featureNames[feature]??feature}</li>)}</ul><button disabled>{plan.code===currentCode?"Plan actual":"Próximamente"}</button></article>)}</div>
     {!ordered.length&&<div className="content-card"><EmptyLine text="No pudimos cargar el catálogo de planes. Actualizá la página para volver a intentar."/></div>}
