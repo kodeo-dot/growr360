@@ -30,7 +30,7 @@ await writeFile(
           method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token },
           body: JSON.stringify({ collections: ["sentinel-2-l2a"], intersects: geometry.geometry, datetime: from.toISOString() + "/" + to.toISOString(), limit: 100 })
         });
-        if (!response.ok) throw new Error("Copernicus no respondió correctamente.");
+        if (!response.ok) throw new Error("Planet Insights no respondió correctamente.");
         const data = await response.json();
         const days = new Map();
         for (const item of data.features || []) {
@@ -58,7 +58,7 @@ await writeFile(
           evalscript
         };
         const response = await fetch("https://services.sentinel-hub.com/api/v1/process", { method: "POST", headers: { "content-type": "application/json", accept: "image/png", authorization: "Bearer " + token }, body: JSON.stringify(body) });
-        if (!response.ok) throw new Error("No se pudo procesar esta fecha de Sentinel-2.");
+        if (!response.ok) throw new Error("Planet Insights no pudo procesar esta fecha.");
         return new Response(response.body, { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       } catch (error) { return Response.json({ error: error.message || "No se pudo generar la imagen." }, { status: 500 }); }
     }
@@ -76,10 +76,12 @@ await writeFile(
 };
 
 async function sentinelToken(env) {
-  if (!env.SENTINEL_HUB_CLIENT_ID || !env.SENTINEL_HUB_CLIENT_SECRET) throw new Error("El servicio Sentinel-2 todavía no está configurado en la web.");
-  const body = new URLSearchParams({ grant_type: "client_credentials", client_id: env.SENTINEL_HUB_CLIENT_ID, client_secret: env.SENTINEL_HUB_CLIENT_SECRET });
+  const clientId = env.PLANET_INSIGHTS_CLIENT_ID || env.SENTINEL_HUB_CLIENT_ID;
+  const clientSecret = env.PLANET_INSIGHTS_CLIENT_SECRET || env.SENTINEL_HUB_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Planet Insights todavía no está configurado en la web.");
+  const body = new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret });
   const response = await fetch("https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" }, body });
-  if (!response.ok) throw new Error("No se pudo autenticar con Copernicus.");
+  if (!response.ok) throw new Error("No se pudo autenticar con Planet Insights.");
   return (await response.json()).access_token;
 }
 

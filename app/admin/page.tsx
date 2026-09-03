@@ -37,8 +37,8 @@ export default function AdminPage(){
  </div>
 }
 
-function AdminBrand(){return <div className="admin-brand"><img src="/growr360-logo.png" alt="Growr360"/><div><strong>Growr<span>360</span></strong><small>Administración</small></div></div>}
-function AdminLoading(){return <div className="admin-loading"><img src="/growr360-logo.png" alt="Growr360"/><LoaderCircle className="spin"/><strong>Preparando panel administrativo…</strong></div>}
+function AdminBrand(){return <div className="admin-brand"><img src="/favicon.svg" alt="Growr360"/><div><strong>Growr<span>360</span></strong><small>Administración</small></div></div>}
+function AdminLoading(){return <div className="admin-loading"><img src="/favicon.svg" alt="Growr360"/><LoaderCircle className="spin"/><strong>Preparando panel administrativo…</strong></div>}
 function AdminAccess({title,text,detail}:{title:string;text:string;detail?:string}){return <div className="admin-access"><div><CircleAlert/><h1>{title}</h1><p>{text}</p>{detail&&<small>{detail}</small>}<a href="/"><ArrowLeft/>Volver a Growr360</a></div></div>}
 function AdminSearch({value,setValue,placeholder,busy,submit}:{value:string;setValue:(v:string)=>void;placeholder:string;busy:boolean;submit:()=>void}){return <form className="admin-search" onSubmit={(event:FormEvent)=>{event.preventDefault();submit()}}><Search/><input value={value} onChange={e=>setValue(e.target.value)} placeholder={placeholder}/><button disabled={busy}>{busy?<LoaderCircle className="spin"/>:"Buscar"}</button></form>}
 function AdminEmpty({icon:Icon,title,text}:{icon:typeof Tractor;title:string;text:string}){return <div className="admin-empty"><Icon/><strong>{title}</strong><p>{text}</p></div>}

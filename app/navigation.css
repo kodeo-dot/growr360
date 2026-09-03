@@ -21,6 +21,7 @@
 .nav-subitem:hover{background:#ffffff09!important;color:#fff!important}
 .nav-subitem.active{background:#6fdd5017!important;color:#9cec7f!important}
 .nav-subitem.active:before{display:none!important}
+.nav-group:last-child .nav-submenu{grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;margin-right:0}.nav-group:last-child .nav-subitem{min-height:34px;padding:5px 6px!important;gap:6px;font-size:10px!important}.nav-group:last-child .nav-subitem span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nav-group:last-child .nav-subitem:last-child{grid-column:1/-1}.nav-group:last-child .nav-subitem em{display:none}
 .nav-subitem em{min-width:24px;height:20px;padding:0 6px;border-radius:999px;display:grid;place-items:center;font-size:9px;font-style:normal}
 .workspace-card{flex:0 0 auto;margin-top:6px!important}
 .sidebar-footer{flex:0 0 auto}

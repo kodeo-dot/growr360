@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { copernicusToken, unwrapGeometry } from "../../../../lib/copernicus";
+import { planetInsightsToken, unwrapGeometry } from "../../../../lib/copernicus";
 
 export const runtime = "nodejs";
 
@@ -7,17 +7,17 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
     const geometry = unwrapGeometry(payload.geometry);
-    const token = await copernicusToken();
+    const token = await planetInsightsToken();
     const to = new Date();
     const from = new Date(to);
     from.setMonth(from.getMonth() - 6);
-    const response = await fetch("https://sh.dataspace.copernicus.eu/catalog/v1/search", {
+    const response = await fetch("https://services.sentinel-hub.com/api/v1/catalog/1.0.0/search", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify({ collections: ["sentinel-2-l2a"], intersects: geometry, datetime: `${from.toISOString()}/${to.toISOString()}`, limit: 200 }),
       cache: "no-store"
     });
-    if (!response.ok) throw new Error(`Copernicus no respondió correctamente (${response.status}).`);
+    if (!response.ok) throw new Error(`Planet Insights no respondió correctamente (${response.status}).`);
     const data = await response.json() as { features?: Array<{ id: string; properties?: Record<string, unknown> }> };
     const byDay = new Map<string, { id: string; date: string; cloud: number; satellite: string }>();
     for (const item of data.features ?? []) {

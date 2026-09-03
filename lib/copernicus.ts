@@ -8,9 +8,12 @@ type FeatureInput = { geometry?: GeoJsonGeometry } | GeoJsonGeometry;
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
 function credentials() {
-  const clientId = process.env.COPERNICUS_CLIENT_ID ?? process.env.SENTINEL_HUB_CLIENT_ID;
-  const clientSecret = process.env.COPERNICUS_CLIENT_SECRET ?? process.env.SENTINEL_HUB_CLIENT_SECRET;
-  if (!clientId || !clientSecret) throw new Error("Copernicus todavía no está configurado en el servidor.");
+  // Planet Insights conserva compatibilidad con las claves históricas de
+  // Sentinel Hub. Se priorizan las variables de Planet sin romper la cuenta
+  // que ya estaba configurada.
+  const clientId = process.env.PLANET_INSIGHTS_CLIENT_ID ?? process.env.SENTINEL_HUB_CLIENT_ID;
+  const clientSecret = process.env.PLANET_INSIGHTS_CLIENT_SECRET ?? process.env.SENTINEL_HUB_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Planet Insights todavía no está configurado en el servidor.");
   return { clientId, clientSecret };
 }
 
@@ -20,18 +23,18 @@ export function unwrapGeometry(input: FeatureInput): GeoJsonGeometry {
   return candidate;
 }
 
-export async function copernicusToken() {
+export async function planetInsightsToken() {
   if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
   const { clientId, clientSecret } = credentials();
-  const response = await fetch("https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token", {
+  const response = await fetch("https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }),
     cache: "no-store"
   });
-  if (!response.ok) throw new Error(`No se pudo autenticar con Copernicus (${response.status}).`);
+  if (!response.ok) throw new Error(`No se pudo autenticar con Planet Insights (${response.status}).`);
   const payload = await response.json() as { access_token?: string; expires_in?: number };
-  if (!payload.access_token) throw new Error("Copernicus no devolvió un token válido.");
+  if (!payload.access_token) throw new Error("Planet Insights no devolvió un token válido.");
   cachedToken = { value: payload.access_token, expiresAt: Date.now() + Math.max(60, payload.expires_in ?? 600) * 1000 };
   return cachedToken.value;
 }
