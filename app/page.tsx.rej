@@ -1,5 +1,4 @@
---- a/app/page.tsx
-+++ b/app/page.tsx
+diff a/app/page.tsx b/app/page.tsx	(rejected hunks)
 @@ -78,6 +78,16 @@
  type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
  type SubscriptionPlan = { code:"free"|"pro"|"business";name:string;max_hectares:number|null;max_fields:number|null;max_lots:number|null;max_users:number|null;max_kml_imports:number|null;features:string[];monthly_price_usd:number;annual_price_usd:number;included_hectares:number|null;extra_hectare_price_year_usd:number };
