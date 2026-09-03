@@ -731,7 +731,10 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current); }, [refreshSources]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.getSource("drawing")) refreshSources(map);
+  }, [refreshSources]);
 
   useEffect(() => {
     if (!selectedPlot || !mapRef.current?.loaded()) return;
@@ -748,7 +751,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.loaded()) return;
+    if (!map) return;
     const click = (event: maplibregl.MapMouseEvent) => {
       if (!drawing || suppressMapClickRef.current) return;
       const handles = map.queryRenderedFeatures(event.point, { layers: ["draw-points", "draw-midpoints"] });
@@ -820,7 +823,10 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     };
   }, [drawing]);
 
-  useEffect(() => { if (mapRef.current?.loaded()) refreshSources(mapRef.current, points); }, [points, refreshSources]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.getSource("drawing")) refreshSources(map, points);
+  }, [points, refreshSources]);
 
   function startDrawing() {
     if (!fields.length || !canManageLots) return;
