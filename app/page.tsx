@@ -755,8 +755,14 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setLayoutProperty("satellite", "visibility", baseMap === "satellite" ? "visible" : "none");
-    map.setLayoutProperty("streets", "visibility", baseMap === "streets" ? "visible" : "none");
+    const applyBaseMapVisibility = () => {
+      if (!map.isStyleLoaded()) return;
+      if (map.getLayer("satellite")) map.setLayoutProperty("satellite", "visibility", baseMap === "satellite" ? "visible" : "none");
+      if (map.getLayer("streets")) map.setLayoutProperty("streets", "visibility", baseMap === "streets" ? "visible" : "none");
+    };
+    if (map.isStyleLoaded()) applyBaseMapVisibility();
+    else map.once("style.load", applyBaseMapVisibility);
+    return () => { map.off("style.load", applyBaseMapVisibility); };
   }, [baseMap]);
 
   useEffect(() => {
