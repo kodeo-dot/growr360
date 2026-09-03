@@ -42,7 +42,7 @@
   .sidebar .brand span,.sidebar-navigation span,.workspace-card label,.sidebar .user-mini>div:nth-child(2){display:block!important}
   .sidebar-navigation{align-items:stretch!important}
 }
-@media(min-width:761px) and (max-width:1050px){.sidebar-group-picker{grid-template-columns:1fr;padding:6px}.sidebar-group-picker>span,.sidebar-group-picker>svg:last-child{display:none}.sidebar-group-picker>svg:first-child{justify-self:center}}
+@media(min-width:761px) and (max-width:1050px){.sidebar-group-picker{grid-template-columns:24px minmax(0,1fr);padding:6px}.sidebar-group-picker>span{display:grid!important;opacity:1!important;visibility:visible!important}.sidebar-group-picker>svg:last-child{display:none}.sidebar-group-picker>svg:first-child{justify-self:center}}
 @media(max-width:760px){
   .app-shell>main{height:100dvh!important}
   .sidebar{height:100dvh!important;overflow:hidden!important}

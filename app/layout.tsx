@@ -4,6 +4,7 @@ import "./globals.css";
 import "./navigation.css";
 import "./plans.css";
 import "./team.css";
+import "./legal.css";
 
 export const metadata: Metadata = {
   title: "Growr360 — Gestión agrícola inteligente",
