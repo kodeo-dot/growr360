@@ -334,7 +334,7 @@ function PublicLanding({ onLogin, onRegister, onLegal }: { onLogin: () => void; 
   const modules=[
     {label:"Territorio",text:"Mapa, campos, lotes y campañas en contexto.",icon:Map},
     {label:"Trabajo diario",text:"Registros y monitoreos simples, aun desde el lote.",icon:FileText},
-    {label:"Decisiones",text:"Reportes claros e imágenes Copernicus para actuar a tiempo.",icon:BarChart3},
+    {label:"Decisiones",text:"Reportes claros e imágenes Planet Insights para actuar a tiempo.",icon:BarChart3},
     {label:"Equipo",text:"Personas, permisos y responsabilidades sin cruces.",icon:Users}
   ];
   return <div className="public-site public-site-v3 pastel-landing">
