@@ -78,6 +78,16 @@ type Supply = { id:string; name:string; category:string; unit:string; unit_price
 type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
 type SubscriptionPlan = { code:"free"|"pro"|"business";name:string;max_hectares:number|null;max_fields:number|null;max_lots:number|null;max_users:number|null;max_kml_imports:number|null;features:string[];monthly_price_usd:number;annual_price_usd:number;included_hectares:number|null;extra_hectare_price_year_usd:number };
 type GroupSubscription = { id:string;group_id:string;plan:"free"|"pro"|"business";status:"active"|"trialing"|"expired"|"cancelled";started_at:string;expires_at?:string|null };
+// Single source of truth for the group's effective plan: public.group_subscriptions, scoped by group_id.
+// A subscription only grants its plan while it is active/trialing and not expired; otherwise the group is treated as free.
+// This must be the ONLY function in the app that decides which plan applies — never read plan info from
+// user_subscriptions or from any profile-level subscription field.
+function resolveActivePlan(subscription: GroupSubscription | null): "free"|"pro"|"business" {
+  if (!subscription) return "free";
+  const statusOk = subscription.status === "active" || subscription.status === "trialing";
+  const notExpired = !subscription.expires_at || new Date(subscription.expires_at) > new Date();
+  return statusOk && notExpired ? subscription.plan : "free";
+}
 type GroupSubscriptionUsage = { group_id:string;kml_imports:number;updated_at:string };
 type WorkOrder = {id:string;group_id:string;campaign_id:string;field_id?:string|null;plot_id?:string|null;order_type:"application"|"sowing"|"harvest"|"activity"|"monitoring"|"other";status:"draft"|"pending"|"in_progress"|"completed"|"cancelled";priority:"low"|"normal"|"high"|"urgent";title:string;instructions?:string|null;notes?:string|null;scheduled_date:string;scheduled_end_date?:string|null;planned_area?:number|null;assigned_to?:string|null;contractor_id?:string|null;planned_data?:Record<string,unknown>;actual_data?:Record<string,unknown>;resulting_record_id?:string|null;created_by:string;completed_at?:string|null;fields?:{name:string}|null;plots?:{name:string}|null;campaigns?:{name:string}|null;profiles?:Profile|null;contractors?:{name:string}|null;work_order_products?:WorkOrderProduct[]};
 type WorkOrderProduct={id:string;input_id?:string|null;product_name:string;dose?:number|null;dose_unit?:string|null;planned_quantity?:number|null;actual_quantity?:number|null;notes?:string|null};
@@ -401,6 +411,10 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscription, setSubscription] = useState<GroupSubscription | null>(null);
   const [subscriptionUsage, setSubscriptionUsage] = useState<GroupSubscriptionUsage | null>(null);
+  const [subscriptionError, setSubscriptionError] = useState("");
+  // The one place the whole app derives the group's effective plan from public.group_subscriptions.
+  // Every feature-gate and every plan display must read this instead of `subscription.plan` directly.
+  const activePlan = useMemo(() => resolveActivePlan(subscription), [subscription]);
   const [workOrders,setWorkOrders]=useState<WorkOrder[]>([]);
 
   const group = memberships.map(m => relation(m.groups)).find(g => g?.id === groupId) ?? null;
@@ -440,12 +454,20 @@ function AuthenticatedApp({ session }: { session: Session }) {
       ,supabase.from("clients").select("id,name,cuit,phone,email").eq("group_id", targetGroup).is("deleted_at", null).order("name")
       ,supabase.from("inputs").select("id,name,category,unit,unit_price,currency").eq("group_id", targetGroup).is("deleted_at", null).order("name")
       ,supabase.from("contractors").select("id,group_id,name,phone,document,address,notes").eq("group_id",targetGroup).is("deleted_at",null).order("name")
-      ,supabase.from("group_subscriptions").select("id,group_id,plan,status,started_at,expires_at").eq("group_id",targetGroup).maybeSingle()
+      ,supabase.from("group_subscriptions").select("id,group_id,plan,status,started_at,expires_at").eq("group_id",targetGroup).order("started_at",{ascending:false}).limit(1)
       ,supabase.from("group_subscription_usage").select("group_id,kml_imports,updated_at").eq("group_id",targetGroup).maybeSingle()
       ,supabase.from("work_orders").select("id,group_id,campaign_id,field_id,plot_id,order_type,status,priority,title,instructions,notes,scheduled_date,scheduled_end_date,planned_area,assigned_to,contractor_id,planned_data,actual_data,resulting_record_id,created_by,completed_at,fields(name),plots(name),campaigns(name),profiles!work_orders_assigned_to_fkey(id,first_name,last_name,username,email,phone,avatar_path),contractors(name),work_order_products(id,input_id,product_name,dose,dose_unit,planned_quantity,actual_quantity,notes)").eq("group_id",targetGroup).is("deleted_at",null).order("scheduled_date",{ascending:true})
     ]);
     const criticalError = fieldResult.error ?? plotResult.error ?? recordResult.error;
     if (criticalError) setError(criticalError.message);
+    if (subscriptionResult.error) {
+      // Never silently downgrade a group to "free" because of a failed fetch (e.g. RLS misconfiguration).
+      // Surface it distinctly so a real plan mismatch is never mistaken for "the group has no subscription".
+      console.error("group_subscriptions fetch failed:", subscriptionResult.error.message);
+      setSubscriptionError(subscriptionResult.error.message);
+    } else {
+      setSubscriptionError("");
+    }
     setFields((fieldResult.data ?? []) as Field[]);
     setPlots((plotResult.data ?? []) as unknown as Plot[]);
     setRecords((recordResult.data ?? []) as unknown as RecordRow[]);
@@ -458,7 +480,11 @@ function AuthenticatedApp({ session }: { session: Session }) {
     setClients((clientResult.data ?? []) as ClientRow[]);
     setSupplies((supplyResult.data ?? []) as Supply[]);
     setContractors((contractorResult.data??[]) as Contractor[]);
-    setSubscription((subscriptionResult.data as GroupSubscription|null)??null);
+    // group_subscriptions is the single source of truth for the group's plan, keyed by group_id.
+    // Ordered/limited above (instead of .maybeSingle()) so a stray duplicate row can never turn into a
+    // silent fetch error that gets misread as "no subscription" -> "free".
+    const subscriptionRows = (subscriptionResult.data as GroupSubscription[] | null) ?? [];
+    setSubscription(subscriptionRows[0] ?? null);
     setSubscriptionUsage((usageResult.data as GroupSubscriptionUsage|null)??null);
     setWorkOrders((workOrderResult.data??[]) as unknown as WorkOrder[]);
     setSyncing(false);
@@ -561,13 +587,13 @@ function AuthenticatedApp({ session }: { session: Session }) {
         {view === "monitoreos" && <RealRecordsView mode="monitoring" records={records} canCreate={hasPermission("create_monitoring")} onCreate={() => { setPendingRecord({plotId:"",type:"monitoring"}); setPendingForm("record"); }}/>} 
         {view === "napas" && <NapaView records={records} canCreate={hasPermission("create_records")} onCreate={() => { setPendingRecord({plotId:"",type:"napa"}); setPendingForm("record"); }}/>} 
         {view === "campanas" && <CampaignsView campaigns={campaigns} records={records} canCreate={hasPermission("manage_campaigns")} onCreate={() => setPendingForm("campaign")}/>} 
-        {view === "ordenes" && <WorkOrdersView groupId={groupId} userId={session.user.id} orders={workOrders} fields={fields} plots={plots} campaigns={campaigns} members={members} contractors={contractors} supplies={supplies} plan={subscription?.plan??"free"} canCreate={hasPermission("create_records")} canEditAny={hasPermission("edit_any_records")} canEditOwn={hasPermission("edit_own_records")} onSaved={()=>void loadGroupData(groupId,true)}/>} 
+        {view === "ordenes" && <WorkOrdersView groupId={groupId} userId={session.user.id} orders={workOrders} fields={fields} plots={plots} campaigns={campaigns} members={members} contractors={contractors} supplies={supplies} plan={activePlan} canCreate={hasPermission("create_records")} canEditAny={hasPermission("edit_any_records")} canEditOwn={hasPermission("edit_own_records")} onSaved={()=>void loadGroupData(groupId,true)}/>} 
         {view === "reportes" && <RealReportsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} records={records} crops={crops} campaigns={campaigns}/>}
         {view === "equipo" && <RealTeamView section="members" groupId={groupId} members={members} fields={fields} plots={plots} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "solicitudes" && <RealTeamView section="requests" groupId={groupId} members={members} fields={fields} plots={plots} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "invitaciones" && <RealTeamView section="invitations" groupId={groupId} members={members} fields={fields} plots={plots} currentRole={activeMembership?.role ?? "producer"} canManage={hasPermission("manage_members") || activeMembership?.role === "admin"} onSection={setView} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "mas" && <MoreView canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onOpenTeam={()=>setView("equipo")} onOpenSettings={()=>setView("configuracion")} onOpenGroupSettings={()=>setView("grupo")} onOpenPlans={()=>setView("planes")}/>}
-        {view === "planes" && <PlansView plans={plans} subscription={subscription} plots={plots} campaigns={campaigns} assignments={assignments} members={members} groupName={group?.name??"Grupo activo"}/>}
+        {view === "planes" && <PlansView plans={plans} subscription={subscription} activePlan={activePlan} subscriptionError={subscriptionError} plots={plots} campaigns={campaigns} assignments={assignments} members={members} groupName={group?.name??"Grupo activo"}/>}
         {view === "configuracion" && <RealSettingsView mode="personal" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {view === "grupo" && <RealSettingsView mode="group" groupId={groupId} userId={session.user.id} settings={settings} group={group} canManageGroup={activeMembership?.role === "owner" || activeMembership?.role === "admin"} onSaved={setSettings} onGroupSaved={() => void loadWorkspace()}/>} 
         {pendingForm && <ManagementView groupId={groupId} userId={session.user.id} fields={fields} plots={plots} campaigns={campaigns} clients={clients} contractors={contractors} crops={crops} supplies={supplies} canFields={hasPermission("manage_fields")} canLots={hasPermission("manage_lots")} canCampaigns={hasPermission("manage_campaigns")} canRecords={hasPermission("create_records")} initialForm={pendingForm} initialRecord={pendingRecord} onInitialRecordConsumed={() => setPendingRecord(null)} onClose={() => setPendingForm(null)} onMap={() => { setPendingForm(null); setView("mapa"); }} onSaved={() => { setPendingForm(null); void loadGroupData(groupId, true); }}/>} 
@@ -1411,9 +1437,8 @@ function MoreView({canManageGroup,onOpenTeam,onOpenSettings,onOpenGroupSettings,
   return <div className="page-content"><PageHead title="Más" text="Cuenta, configuración y administración."/><div className="more-tools-clean"><button className="more-option" onClick={onOpenTeam}><Users/><div><strong>Equipo y permisos</strong><small>Miembros, roles y accesos</small></div><ChevronRight/></button><button className="more-option" onClick={onOpenPlans}><CreditCard/><div><strong>Planes Growr360</strong><small>Plan actual, límites y funciones</small></div><ChevronRight/></button>{canManageGroup&&<button className="more-option" onClick={onOpenGroupSettings}><ShieldCheck/><div><strong>Configuración del grupo</strong><small>Identidad, foto y datos institucionales</small></div><ChevronRight/></button>}<button className="more-option" onClick={onOpenSettings}><Settings2/><div><strong>Ajustes personales</strong><small>Unidades, fechas y notificaciones</small></div><ChevronRight/></button></div></div>
 }
 
-function PlansView({plans,subscription,plots,campaigns,assignments,members,groupName}:{plans:SubscriptionPlan[];subscription:GroupSubscription|null;plots:Plot[];campaigns:Campaign[];assignments:PlotCampaign[];members:Member[];groupName:string}){
-  const validSubscription=subscription&&["active","trialing"].includes(subscription.status)&&(!subscription.expires_at||new Date(subscription.expires_at)>new Date());
-  const currentCode=validSubscription?subscription.plan:"free";
+function PlansView({plans,subscription,activePlan,subscriptionError,plots,campaigns,assignments,members,groupName}:{plans:SubscriptionPlan[];subscription:GroupSubscription|null;activePlan:"free"|"pro"|"business";subscriptionError?:string;plots:Plot[];campaigns:Campaign[];assignments:PlotCampaign[];members:Member[];groupName:string}){
+  const currentCode=activePlan;
   const ordered=["free","pro","business"].map(code=>plans.find(plan=>plan.code===code)).filter(Boolean) as SubscriptionPlan[];
   const current=ordered.find(plan=>plan.code===currentCode)??plans.find(plan=>plan.code===currentCode);
   const activeCampaignIds=new Set(campaigns.filter(campaign=>campaign.status==="active").map(campaign=>campaign.id));
@@ -1431,6 +1456,7 @@ function PlansView({plans,subscription,plots,campaigns,assignments,members,group
     business:["Todo lo incluido en Growr Pro","Gestión preparada para múltiples organizaciones y clientes","Dashboard global multiempresa","Administración y permisos empresariales","Reportes empresariales centralizados","Soporte prioritario y onboarding dedicado","Arquitectura preparada para futuras integraciones y API"]
   };
   return <div className="page-content plans-page"><PageHead title="Planes Growr360" text={`Funciones y límites de la organización ${groupName}.`}/>
+    {subscriptionError&&<div className="content-card" style={{borderColor:"#e0a100"}}><EmptyLine text={`No pudimos confirmar el plan del grupo (${subscriptionError}). Se muestra Growr Free por seguridad hasta poder verificarlo — actualizá la página o contactá a soporte si el problema persiste.`}/></div>}
     <section className="plan-current"><div><span><ShieldCheck/></span><div><small>PLAN DEL GRUPO · {groupName}</small><h3>{current?.name??"Growr Free"}</h3><p>{subscription?.status==="trialing"?"Período de prueba activo para todo el grupo":"Todos los miembros acceden a estas funciones; sus acciones dependen del rol."}</p></div></div>{subscription?.expires_at&&<time>Vigente hasta {formatDate(subscription.expires_at)}</time>}</section>
     <section className="plan-usage"><header><div><h3>Uso del plan</h3><p>Los límites se aplican igual en la web y en la aplicación.</p></div><span>{currentCode.toUpperCase()}</span></header><div>{metrics.map(metric=>{const percent=metric.limit==null?0:Math.min(100,(metric.value/Math.max(1,metric.limit))*100);return <article key={metric.label}><div><strong>{metric.label}</strong><span>{metric.value.toLocaleString("es-AR",{maximumFractionDigits:2})}{metric.suffix??""} de {metric.limit==null?"Ilimitado":`${metric.limit.toLocaleString("es-AR")}${metric.suffix??""}`}</span></div><div className={metric.limit!=null&&percent>=90?"near-limit":""}><i style={{width:metric.limit==null?"100%":`${percent}%`}}/></div></article>})}</div></section>
     <div className="plans-grid">{ordered.map(plan=>{const price=planPrice(plan.code);return <article key={plan.code} className={`${plan.code===currentCode?"current":""} ${plan.code}`}><header><div><span>{plan.code==="free"?<Leaf/>:plan.code==="pro"?<TrendingUp/>:<BriefcaseBusiness/>}</span><div><small>{plan.code==="free"?"INICIAL":plan.code==="pro"?"PROFESIONAL":"EMPRESA"}</small><h3>{plan.name}</h3><p>{planText(plan)}</p></div></div>{plan.code===currentCode&&<b>Tu plan</b>}</header><div className="plan-price"><strong>{price.amount}</strong><span>{price.caption}</span><small>Precio informativo · sin cobros desde Growr360</small></div><div className="plan-limits"><span>{`Hasta ${(plan.included_hectares??plan.max_hectares??0).toLocaleString("es-AR")} ha activas incluidas`}</span><span>Campos, lotes, campañas e historial ilimitados</span><span>{plan.max_users==null?"Integrantes ilimitados":`Hasta ${plan.max_users} integrantes`}</span><span>Importaciones KML/KMZ ilimitadas</span>{plan.extra_hectare_price_year_usd>0&&<span>Superficie adicional: USD {plan.extra_hectare_price_year_usd.toLocaleString("es-AR")} por ha/año</span>}</div><ul>{planBenefits[plan.code].map(benefit=><li key={benefit}><Check/>{benefit}</li>)}</ul><button disabled>{plan.code===currentCode?"Plan actual":"Solicitar acceso próximamente"}</button></article>})}</div>
