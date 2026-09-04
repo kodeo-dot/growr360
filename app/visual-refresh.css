@@ -68,3 +68,18 @@
 }
 @media(max-width:980px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{display:flex!important;padding:50px 28px 0!important;min-height:850px!important;align-items:flex-start!important}.public-site-v3.pastel-landing .growr-hero-copy{width:100%!important}.public-site-v3.pastel-landing .growr-hero-photo{right:28px!important;width:calc(100% - 56px)!important;height:390px!important}}
 @media(max-width:700px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{min-height:820px!important;padding:42px 22px 0!important}.public-site-v3.pastel-landing .growr-hero-copy h1{font-size:48px!important}.public-site-v3.pastel-landing .growr-hero-photo{right:22px!important;width:calc(100% - 44px)!important;height:340px!important}.public-site-v3.pastel-landing .growr-workflow,.public-site-v3.pastel-landing .growr-product-stories{padding-top:62px!important;padding-bottom:62px!important}}
+
+/* Landing compacta: cada bloque usa solamente el alto que necesita. */
+.public-site-v3.pastel-landing .public-hero-v3.growr-hero{min-height:clamp(520px,62vh,630px)!important;padding-block:28px!important}
+.public-site-v3.pastel-landing .growr-hero-copy>p{margin:19px 0!important}
+.public-site-v3.pastel-landing .growr-hero-copy>ul{margin-top:20px!important}
+.public-site-v3.pastel-landing .growr-workflow{padding-top:58px!important;padding-bottom:58px!important}
+.public-site-v3.pastel-landing .growr-workflow .module-rail{margin-top:40px!important}
+.public-site-v3.pastel-landing .growr-product-stories{padding-top:58px!important;padding-bottom:58px!important;gap:58px!important}
+.public-site-v3.pastel-landing .value-section{padding-top:68px!important;padding-bottom:68px!important}
+.public-site-v3.pastel-landing .value-grid{margin-top:42px!important}
+.public-site-v3.pastel-landing .about-v3{margin-top:72px!important;margin-bottom:72px!important}
+.public-site-v3.pastel-landing .legal-section-v3{padding-top:62px!important;padding-bottom:62px!important}
+.public-site-v3.pastel-landing .legal-section-v3 .legal-grid{margin-top:34px!important}
+@media(max-width:980px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{min-height:760px!important;padding-top:38px!important}.public-site-v3.pastel-landing .growr-hero-photo{height:320px!important}}
+@media(max-width:700px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{min-height:700px!important;padding-top:30px!important}.public-site-v3.pastel-landing .growr-hero-photo{height:275px!important}.public-site-v3.pastel-landing .growr-workflow,.public-site-v3.pastel-landing .growr-product-stories{padding-top:46px!important;padding-bottom:46px!important}}
