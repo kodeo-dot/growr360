@@ -62,10 +62,7 @@
 .public-site-v3.pastel-landing .growr-hero-photo>div span{color:#557569!important}
 .public-site-v3.pastel-landing .growr-workflow{padding-top:78px!important;padding-bottom:78px!important}
 .public-site-v3.pastel-landing .growr-product-stories{padding-top:78px!important;padding-bottom:78px!important;gap:82px!important}
-.public-site-v3.pastel-landing .landing-reveal{opacity:1;transform:none;animation:none}
-@supports (animation-timeline:view()){
-  .public-site-v3.pastel-landing .landing-reveal{opacity:0;transform:translateY(24px);animation:landing-enter linear forwards;animation-timeline:view();animation-range:entry 5% cover 28%}
-}
+.public-site-v3.pastel-landing .landing-reveal{opacity:1!important;transform:none!important;animation:none!important}
 @media(max-width:980px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{display:flex!important;padding:50px 28px 0!important;min-height:850px!important;align-items:flex-start!important}.public-site-v3.pastel-landing .growr-hero-copy{width:100%!important}.public-site-v3.pastel-landing .growr-hero-photo{right:28px!important;width:calc(100% - 56px)!important;height:390px!important}}
 @media(max-width:700px){.public-site-v3.pastel-landing .public-hero-v3.growr-hero{min-height:820px!important;padding:42px 22px 0!important}.public-site-v3.pastel-landing .growr-hero-copy h1{font-size:48px!important}.public-site-v3.pastel-landing .growr-hero-photo{right:22px!important;width:calc(100% - 44px)!important;height:340px!important}.public-site-v3.pastel-landing .growr-workflow,.public-site-v3.pastel-landing .growr-product-stories{padding-top:62px!important;padding-bottom:62px!important}}
 
@@ -75,6 +72,8 @@
 .public-site-v3.pastel-landing .growr-hero-copy>ul{margin-top:20px!important}
 .public-site-v3.pastel-landing .growr-workflow{padding-top:58px!important;padding-bottom:58px!important}
 .public-site-v3.pastel-landing .growr-workflow .module-rail{margin-top:40px!important}
+.public-site-v3.pastel-landing .growr-workflow .module-rail article{min-height:170px!important}
+.public-site-v3.pastel-landing .growr-product-stories{content-visibility:visible!important}
 .public-site-v3.pastel-landing .growr-product-stories{padding-top:58px!important;padding-bottom:58px!important;gap:58px!important}
 .public-site-v3.pastel-landing .value-section{padding-top:68px!important;padding-bottom:68px!important}
 .public-site-v3.pastel-landing .value-grid{margin-top:42px!important}

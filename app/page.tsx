@@ -457,7 +457,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       ,supabase.from("contractors").select("id,group_id,name,phone,document,address,notes").eq("group_id",targetGroup).is("deleted_at",null).order("name")
       ,supabase.from("group_subscriptions").select("id,group_id,plan,status,started_at,expires_at").eq("group_id",targetGroup).order("started_at",{ascending:false}).limit(1)
       ,supabase.from("group_subscription_usage").select("group_id,kml_imports,updated_at").eq("group_id",targetGroup).maybeSingle()
-      ,supabase.from("work_orders").select("id,group_id,campaign_id,field_id,plot_id,order_type,status,priority,title,instructions,notes,scheduled_date,scheduled_end_date,planned_area,assigned_to,contractor_id,planned_data,actual_data,resulting_record_id,created_by,completed_at,fields(name),plots(name),campaigns(name),profiles!work_orders_assigned_to_fkey(id,first_name,last_name,username,email,phone,avatar_path),contractors(name),work_order_products(id,input_id,product_name,dose,dose_unit,planned_quantity,actual_quantity,notes)").eq("group_id",targetGroup).is("deleted_at",null).order("scheduled_date",{ascending:true})
+      ,supabase.from("work_orders").select("id,group_id,campaign_id,field_id,plot_id,order_type,status,priority,title,instructions,notes,scheduled_date,scheduled_end_date,planned_area,assigned_to,contractor_id,planned_data,actual_data,resulting_record_id,created_by,completed_at").eq("group_id",targetGroup).is("deleted_at",null).order("scheduled_date",{ascending:true})
     ]);
     const criticalError = fieldResult.error ?? plotResult.error ?? recordResult.error;
     if (criticalError) setError(criticalError.message);
@@ -487,7 +487,23 @@ function AuthenticatedApp({ session }: { session: Session }) {
     const subscriptionRows = (subscriptionResult.data as GroupSubscription[] | null) ?? [];
     setSubscription(subscriptionRows[0] ?? null);
     setSubscriptionUsage((usageResult.data as GroupSubscriptionUsage|null)??null);
-    setWorkOrders((workOrderResult.data??[]) as unknown as WorkOrder[]);
+    const productResult=workOrderResult.error?{data:[]} : await supabase.from("work_order_products").select("id,work_order_id,input_id,product_name,dose,dose_unit,planned_quantity,actual_quantity,notes").eq("group_id",targetGroup);
+    const fieldRows=(fieldResult.data??[]) as Field[];
+    const plotRows=(plotResult.data??[]) as Plot[];
+    const campaignRows=(campaignResult.data??[]) as Campaign[];
+    const memberRows=(memberResult.data??[]) as unknown as Member[];
+    const contractorRows=(contractorResult.data??[]) as Contractor[];
+    const productRows=(productResult.data??[]) as ({work_order_id:string}&WorkOrderProduct)[];
+    const hydratedOrders=((workOrderResult.data??[]) as unknown as WorkOrder[]).map(order=>({
+      ...order,
+      fields:fieldRows.find(field=>field.id===order.field_id)??null,
+      plots:plotRows.find(plot=>plot.id===order.plot_id)??null,
+      campaigns:campaignRows.find(campaign=>campaign.id===order.campaign_id)??null,
+      profiles:memberRows.find(member=>member.user_id===order.assigned_to)?.profiles??null,
+      contractors:contractorRows.find(contractor=>contractor.id===order.contractor_id)??null,
+      work_order_products:productRows.filter(product=>product.work_order_id===order.id)
+    }));
+    setWorkOrders(hydratedOrders);
     setSyncing(false);
   }, [session.user.id]);
 
@@ -1431,8 +1447,30 @@ function WorkOrdersView({groupId,userId,orders,fields,plots,campaigns,members,co
   }catch(error){setMessage(error instanceof Error?error.message:"No se pudo guardar la orden. Revisá los datos e intentá nuevamente.")}
   finally{setBusy(false)}
  }
- async function changeStatus(item:WorkOrder,next:string){setBusy(true);const result=await supabase.rpc("set_work_order_status",{p_work_order_id:item.id,p_status:next});setBusy(false);if(result.error)setMessage(result.error.message);else{setSelected({...item,status:next as WorkOrder["status"]});onSaved()}}
- async function complete(event:FormEvent){event.preventDefault();if(!selected)return;setBusy(true);setMessage("");const result=await supabase.rpc("complete_work_order",{p_work_order_id:selected.id,p_actual_date:actualDate,p_actual_area:actualArea?Number(actualArea):selected.planned_area??null,p_actual_data:{},p_products:(selected.work_order_products??[]).map(p=>({id:p.id,actual_quantity:p.planned_quantity}))});setBusy(false);if(result.error)setMessage(result.error.message);else{setMode(null);setSelected(null);onSaved()}}
+ async function changeStatus(item:WorkOrder,next:string){
+  setBusy(true);setMessage("");
+  const result=await supabase.from("work_orders").update({status:next,updated_at:new Date().toISOString()}).eq("id",item.id).select("id").single();
+  setBusy(false);if(result.error)setMessage(spanishError(result.error));else{setSelected({...item,status:next as WorkOrder["status"]});onSaved()}
+ }
+ async function completeWithoutWorkOrderRpc(item:WorkOrder){
+  const storedType=item.order_type==="soil_analysis"?"other":item.order_type;
+  const details={...(item.planned_data??{}),source_work_order_id:item.id,work_order_title:item.title,record_kind:item.order_type==="soil_analysis"?"soil_analysis":item.order_type};
+  const saved=await supabase.rpc("save_activity_record",{p_id:null,p_group_id:groupId,p_campaign_id:item.campaign_id,p_field_id:item.field_id??null,p_plot_id:item.plot_id??null,p_type:storedType,p_date:actualDate,p_worked_area:actualArea?Number(actualArea):item.planned_area??null,p_responsible_id:item.assigned_to??userId,p_contractor:item.contractors?.name??"",p_machinery:"",p_observations:item.notes||item.instructions||"",p_allow_member_edits:true,p_data:details});
+  if(saved.error)throw saved.error;
+  const recordId=typeof saved.data==="string"?saved.data:(saved.data as {id?:string}|null)?.id;
+  if(!recordId)throw new Error("No se pudo identificar el registro generado.");
+  await supabase.from("records").update({source_work_order_id:item.id}).eq("id",recordId);
+  const updated=await supabase.from("work_orders").update({status:"completed",resulting_record_id:recordId,completed_by:userId,completed_at:new Date().toISOString(),actual_data:{actual_date:actualDate,actual_area:actualArea?Number(actualArea):item.planned_area??null},updated_at:new Date().toISOString()}).eq("id",item.id).select("id").single();
+  if(updated.error)throw updated.error;
+ }
+ async function complete(event:FormEvent){
+  event.preventDefault();if(!selected)return;setBusy(true);setMessage("");
+  try{
+   const result=await supabase.rpc("complete_work_order",{p_work_order_id:selected.id,p_actual_date:actualDate,p_actual_area:actualArea?Number(actualArea):selected.planned_area??null,p_actual_data:{},p_products:(selected.work_order_products??[]).map(p=>({id:p.id,actual_quantity:p.planned_quantity}))});
+   if(result.error){const missing=result.error.code==="PGRST202"||/schema cache|could not find the function/i.test(result.error.message);if(!missing)throw result.error;await completeWithoutWorkOrderRpc(selected)}
+   setMode(null);setSelected(null);onSaved();
+  }catch(error){setMessage(spanishError(error))}finally{setBusy(false)}
+ }
  async function share(item:WorkOrder){const text=`Orden de trabajo · ${item.title}\n${item.scheduled_date} · ${item.fields?.name??""} ${item.plots?.name??""}`;if(navigator.share)await navigator.share({title:item.title,text});else await navigator.clipboard.writeText(text)}
  const typeLabel=(v:string)=>({sowing:"Siembra",spraying:"Pulverización",fertilization:"Fertilización",harvest:"Cosecha",work:"Roturación / labor",soil_analysis:"Análisis de suelo",other:"Otro"} as Record<string,string>)[v]??v;
  const statusLabel=(v:string)=>({draft:"Borrador",pending:"Pendiente",in_progress:"En curso",completed:"Completada",cancelled:"Cancelada"} as Record<string,string>)[v]??v;
