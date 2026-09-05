@@ -17,7 +17,7 @@ import {
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
   , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud,
-  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, FileUp, History, GripVertical, ArrowUp, ArrowDown
+  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, Minimize2, FileUp, History, GripVertical, ArrowUp, ArrowDown
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -861,6 +861,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [recentOpen,setRecentOpen]=useState(false);
   const kmzInput=useRef<HTMLInputElement>(null);
   const [satelliteOpen, setSatelliteOpen] = useState(false);
+  const [satelliteMinimized, setSatelliteMinimized] = useState(false);
   const [satelliteScenes, setSatelliteScenes] = useState<SatelliteScene[]>([]);
   const [satelliteScene, setSatelliteScene] = useState<SatelliteScene | null>(null);
   const [satelliteIndex, setSatelliteIndex] = useState("NDVI");
@@ -1047,6 +1048,21 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
         const id = event.features?.[0]?.properties?.id;
         setDetailRecord(recordsRef.current.find(row => row.id === id) ?? null);
       });
+      map.on("click", event => {
+        if (drawing) return;
+        const interactiveLayers = ["plot-fill", "monitoring-points"].filter(id => Boolean(map.getLayer(id)));
+        const hit = interactiveLayers.length ? map.queryRenderedFeatures(event.point, { layers: interactiveLayers }) : [];
+        if (hit.length) return;
+        // Un toque/click en una zona libre del mapa limpia los paneles contextuales.
+        // Imágenes satelitales queda abierta a propósito para poder comparar sobre el mapa.
+        setSelectedPlot(null);
+        setDetailRecord(null);
+        setFilterPanel(null);
+        setLayerPanelOpen(false);
+        setLabelPanelOpen(false);
+        setRecentOpen(false);
+        setMapQuery("");
+      });
     });
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
@@ -1218,6 +1234,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   async function openSatellite() {
     const target = selectedPlot ?? mapPlots.find(plot => plot.id === satellitePlotId) ?? mapPlots[0];
     setFilterPanel(null); setLayerPanelOpen(false); setRecentOpen(false); setSelectedPlot(null);
+    setSatelliteMinimized(false);
     setSatelliteOpen(true);
     if (target) await loadSatelliteScenes(target.id); else setSatelliteError("No hay lotes trazados disponibles.");
   }
@@ -1300,11 +1317,13 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm key={`${draft.properties?.imported_name??"drawn"}-${draft.geometry.coordinates[0][0]?.join(",")}`} feature={draft} fields={fields} groupId={groupId} userId={userId} planBlockReason={planBlockReason} onCancel={()=>{if(importQueue.length)advanceImported();else cancelDrawing();}} onSaved={()=>{if(importQueue.length)advanceImported();else{cancelDrawing();onSaved();}}}/>} 
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
-    {satelliteOpen && <aside className="satellite-panel real-satellite"><div className="sat-top"><div><span className="eyebrow">PLANET INSIGHTS · SENTINEL-2</span><strong>Imágenes satelitales</strong></div><button onClick={() => setSatelliteOpen(false)}><X/></button></div>
-      <label className="sat-plot-picker">Lote<select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
-      <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, 10), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
-      {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
-      {!!satelliteScenes.length && <><div className="sat-opacity"><span>Opacidad <b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history"><strong>Historial · {satelliteIndexName(satelliteIndex)}</strong><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></button>)}</div></div></>}
+    {satelliteOpen && <aside className={`satellite-panel real-satellite satellite-panel-v28${satelliteMinimized?" minimized":""}`}><div className="sat-top satellite-top-v28"><div className="sat-title-v28"><span className="sat-icon-v28"><Satellite/></span><span><span className="eyebrow">PLANET INSIGHTS · SENTINEL-2</span><strong>Imágenes satelitales</strong>{satelliteMinimized&&satelliteScene&&<small>{satelliteIndexName(satelliteIndex)} · {formatDate(satelliteScene.date)}</small>}</span></div><div className="sat-window-actions"><button onClick={() => setSatelliteMinimized(value => !value)} title={satelliteMinimized?"Maximizar":"Minimizar"} aria-label={satelliteMinimized?"Maximizar panel":"Minimizar panel"}>{satelliteMinimized?<Maximize2/>:<Minimize2/>}</button><button onClick={() => setSatelliteOpen(false)} title="Cerrar" aria-label="Cerrar imágenes satelitales"><X/></button></div></div>
+      {!satelliteMinimized&&<div className="sat-body-v28">
+        <div className="sat-controls-v28"><label className="sat-plot-picker"><span>Lote</span><select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
+        <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, 10), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div></div>
+        {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
+        {!!satelliteScenes.length && <><div className="sat-opacity"><span><span>Opacidad de la capa</span><b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history sat-history-v28"><div className="sat-history-head"><strong>Historial</strong><small>{satelliteIndexName(satelliteIndex)} · {satelliteScenes.length} imágenes</small></div><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<span className="sat-date-copy"><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></span></button>)}</div></div></>}
+      </div>}
     </aside>}
     {recentOpen&&!drawing&&!draft&&<aside className="lot-panel operational-panel recent-map-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">ACTIVIDAD DEL EQUIPO</span><h2>Últimos registros</h2><h3>Más recientes primero</h3></div><button className="icon-button" onClick={()=>setRecentOpen(false)}><X/></button></div><PlotActivitySection title="Actividad reciente" icon={History} rows={[...records].filter(row=>row.record_type!=="monitoring").sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date))).slice(0,6)} onOpen={setDetailRecord}/></aside>}
     {detailRecord && <RecordDetail record={detailRecord} onClose={() => setDetailRecord(null)}/>}
