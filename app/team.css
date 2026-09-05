@@ -22,3 +22,63 @@
 .page-content:has(.team-grid) .member-card-button .member-active{justify-self:end;padding:6px 9px;border-radius:999px;background:var(--mint)}
 .page-content:has(.team-grid) .member-card-button>svg{grid-column:auto!important;grid-row:1!important}
 @media(max-width:720px){.page-content:has(.team-grid) .member-card-button{grid-template-columns:48px minmax(0,1fr) 18px!important;grid-template-rows:auto auto!important}.page-content:has(.team-grid) .member-card-button>.member-avatar{grid-row:1/3!important;width:48px!important;height:48px!important}.page-content:has(.team-grid) .member-card-button .access{grid-column:2!important}.page-content:has(.team-grid) .member-card-button .member-active{display:none}.page-content:has(.team-grid) .member-card-button>svg{grid-column:3!important;grid-row:1/3!important}}
+
+/* =========================================================
+   Growr360 UI Pack v5 — Equipo, solicitudes, invitaciones y grupos
+   Dirección visual: software B2B serio, menos cards y menos decoración.
+   ========================================================= */
+.page-content:has(.team-grid),.team-subpage{background:var(--paper)!important}
+.page-content:has(.team-grid)>.page-head,.team-subpage>.page-head{max-width:1080px;margin-left:auto;margin-right:auto}
+.team-section-title{width:min(1080px,100%);margin:20px auto 8px!important}
+.page-content:has(.team-grid) .team-grid{width:min(1080px,100%);margin:0 auto;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card);gap:0!important}
+.page-content:has(.team-grid) .member-card-button{min-height:72px!important;padding:10px 14px!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.page-content:has(.team-grid) .member-card-button:last-child{border-bottom:0!important}
+.page-content:has(.team-grid) .member-card-button:hover{background:color-mix(in srgb,var(--mint) 30%,transparent)!important}
+.page-content:has(.team-grid) .member-card-button>.profile-avatar{width:44px!important;height:44px!important}
+.page-content:has(.team-grid) .member-card-button h3{font-size:13px!important}
+.page-content:has(.team-grid) .member-card-button .member-active{background:transparent!important;padding:0!important;color:var(--muted)!important}
+
+.team-requests,.team-requests.standalone{width:min(1080px,100%)!important;margin-left:auto!important;margin-right:auto!important;padding:0!important;border:1px solid var(--line)!important;border-radius:16px!important;overflow:hidden!important;background:var(--card)!important;box-shadow:none!important}
+.team-requests>header,.team-requests.standalone>header{padding:16px 18px!important;margin:0!important;border-bottom:1px solid var(--line)!important;background:#fbfcfb!important}
+.team-requests>header h3{font-size:17px!important;margin:3px 0!important}.team-requests>header p{font-size:11.5px!important;margin:0!important}
+.team-requests .request-count{width:34px!important;height:34px!important;border-radius:999px!important;font-size:12px!important}
+.team-requests article,.team-requests.standalone article{min-height:72px!important;padding:10px 14px!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.team-requests article:last-child{border-bottom:0!important}.team-requests .member-avatar{width:40px!important;height:40px!important;border-radius:50%!important}
+.team-requests .request-person strong{font-size:13px!important}.team-requests .request-person span,.team-requests .request-person small{font-size:10.5px!important}
+.team-requests .request-actions button{min-height:34px!important;padding:0 11px!important;border-radius:8px!important;font-size:11px!important}
+.requests-empty{padding:28px!important;background:#fff!important}
+
+.team-subpage .team-invitations{width:min(1080px,100%)!important;max-width:1080px!important;margin-left:auto!important;margin-right:auto!important;padding:0!important;border:1px solid var(--line)!important;border-radius:16px!important;overflow:hidden!important;background:var(--card)!important;box-shadow:none!important}
+.team-invitations>header{padding:17px 18px!important;border-bottom:1px solid var(--line)!important;background:#fbfcfb!important}
+.team-invitations>header h3{font-size:18px!important;margin:3px 0!important}.team-invitations>header p{font-size:11.5px!important;margin:0!important}
+.team-invitations>header>svg{width:34px!important;height:34px!important;padding:8px!important;border:1px solid var(--line)!important;border-radius:9px!important;background:#fff!important}
+.team-invitations>form{padding:16px 18px!important;display:grid!important;grid-template-columns:minmax(0,1fr) 220px auto!important;gap:10px!important;align-items:end!important}
+.team-invitations>form label{gap:5px!important;font-size:10.5px!important}.team-invitations>form input,.team-invitations>form select{min-height:42px!important;border-radius:9px!important}
+.team-invitations>form .settings-save{min-height:42px!important;border-radius:9px!important;padding:0 14px!important}
+.created-invite-link{margin:0 18px 16px!important;padding:12px!important;border:1px solid #cfe3d6!important;border-radius:10px!important;background:#f6fbf8!important}
+.created-invite-link small{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px!important;word-break:break-all}
+.pending-invites{margin:0!important;padding:0 18px 16px!important}.pending-invites>strong{display:block;padding:10px 0 7px;font-size:11px!important;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.pending-invites article{min-height:54px!important;padding:8px 0!important;border:0!important;border-top:1px solid var(--line)!important;border-radius:0!important;background:transparent!important}
+
+.group-settings-premium{width:min(980px,100%)!important;margin-left:auto!important;margin-right:auto!important;border:1px solid var(--line)!important;border-radius:16px!important;box-shadow:none!important;background:var(--card)!important}
+.group-settings-premium .settings-title{padding-bottom:14px!important;border-bottom:1px solid var(--line)!important}.group-settings-premium .settings-title h3{font-size:18px!important}.group-settings-premium .settings-title p{font-size:11.5px!important}
+.group-settings-premium .group-image-editor{padding:14px 0!important}.group-settings-premium form{gap:12px!important}
+
+.group-browser{max-width:1180px!important;border-radius:18px!important;box-shadow:0 22px 70px rgba(12,42,29,.14)!important;background:#fff!important}
+.group-browser-head{padding-bottom:14px!important;border-bottom:1px solid var(--line)!important}.group-browser-head h2{font-size:22px!important}.group-browser-head p{font-size:11.5px!important}
+.group-search{height:46px!important;margin:14px 0!important;border:1px solid var(--line)!important;border-radius:10px!important;background:#fbfcfb!important;box-shadow:none!important}
+.group-search button{height:34px!important;border-radius:8px!important;padding:0 14px!important}
+.group-browser-layout{gap:0!important;border:1px solid var(--line)!important;border-radius:14px!important;overflow:hidden!important;background:#fff!important}
+.group-results{border-right:1px solid var(--line)!important;background:#fff!important}
+.group-results>button{min-height:72px!important;padding:10px 12px!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}
+.group-results>button:last-child{border-bottom:0!important}.group-results>button:hover,.group-results>button.active{background:#f7faf8!important}
+.group-results>button .group-result-image{width:42px!important;height:42px!important;border-radius:10px!important}
+.group-results>button strong{font-size:13px!important}.group-results>button small,.group-results>button span{font-size:10.5px!important}
+.group-detail{padding:18px!important;background:#fcfdfc!important}.group-detail-cover{height:126px!important;border-radius:11px!important}.group-detail-copy h3{font-size:20px!important}.group-detail-copy p{font-size:11.5px!important}
+.group-facts{gap:8px!important}.group-facts>div{padding:10px!important;border-radius:9px!important;background:#fff!important;border:1px solid var(--line)!important}.group-facts small{font-size:9px!important}.group-facts strong{font-size:11px!important}
+.group-role-picker{padding:12px!important;border-radius:10px!important;background:#fff!important;border:1px solid var(--line)!important}.group-primary,.group-cancel{min-height:42px!important;border-radius:9px!important}
+
+@media(max-width:780px){
+ .team-invitations>form{grid-template-columns:1fr!important}
+ .group-browser-layout{display:block!important}.group-results{border-right:0!important;border-bottom:1px solid var(--line)!important;max-height:280px!important}.group-detail{padding:14px!important}
+}
