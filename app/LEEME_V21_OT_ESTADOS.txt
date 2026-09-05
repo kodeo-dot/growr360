@@ -1,0 +1,14 @@
+Growr360 v21 — Estados de Órdenes de Trabajo
+
+La interfaz de OT queda simplificada a tres estados operativos:
+- Pendiente
+- Finalizada
+- Cancelada
+
+Las órdenes históricas guardadas como "draft" o "in_progress" se interpretan visualmente como Pendiente para mantener compatibilidad y no perder información.
+Las nuevas órdenes nacen como Pendiente y ya no existe la acción "Iniciar".
+
+PDF:
+- Pendiente: estado visible sin sello central.
+- Cancelada: sello central rojo CANCELADA.
+- Finalizada: mismo tratamiento visual del sello de cancelación, pero en verde y con texto FINALIZADA.

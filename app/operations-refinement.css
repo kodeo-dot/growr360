@@ -79,7 +79,7 @@
 
   .work-order-sheet.status-cancelled{position:fixed!important;isolation:isolate}
   .work-order-sheet.status-cancelled::after{
-    content:"CANCELADO";
+    content:"CANCELADA";
     position:fixed;
     z-index:9999;
     left:50%;
@@ -267,7 +267,7 @@
  .work-order-print-host .work-order-actions,.work-order-print-host .icon-button,.work-order-print-host .form-error{display:none!important}
  .work-order-print-host .work-order-detail .status-pending,.work-order-print-host .work-order-detail .status-in_progress{display:inline-flex!important;min-height:26px!important;padding:5px 10px!important;font-size:10pt!important;line-height:1!important;letter-spacing:.04em;text-transform:uppercase;font-weight:900!important;border:1px solid currentColor}
  .work-order-print-host .work-order-sheet.status-cancelled{position:static!important;isolation:isolate}
- .work-order-print-host .work-order-sheet.status-cancelled::after{content:"CANCELADO";position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-17deg);width:72%;padding:12px 18px 10px;border-top:7px solid rgba(166,35,27,.30);border-bottom:7px solid rgba(166,35,27,.30);color:rgba(166,35,27,.22);font-size:62pt;line-height:.92;font-weight:950;letter-spacing:.08em;text-align:center;text-transform:uppercase;white-space:nowrap;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .work-order-print-host .work-order-sheet.status-cancelled::after{content:"CANCELADA";position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-17deg);width:72%;padding:12px 18px 10px;border-top:7px solid rgba(166,35,27,.30);border-bottom:7px solid rgba(166,35,27,.30);color:rgba(166,35,27,.22);font-size:62pt;line-height:.92;font-weight:950;letter-spacing:.08em;text-align:center;text-transform:uppercase;white-space:nowrap;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* OT v6 — multi-lote + legibilidad operativa */
@@ -302,4 +302,50 @@
  .work-order-print-host .work-order-product-table-readable .work-order-product-row strong{font-size:11pt!important}
  .work-order-print-host .work-order-product-table-readable .work-order-dose{font-size:11pt!important;color:#111!important}
  .work-order-print-host .work-order-product-table-readable .work-order-product-row>span{font-size:9.5pt!important}
+}
+
+/* OT v21 — estados simplificados: PENDIENTE / FINALIZADA / CANCELADA */
+@media print{
+  .work-order-sheet .work-order-detail .status-completed,
+  .work-order-sheet .work-order-detail .status-cancelled{
+    display:inline-flex!important;
+    align-items:center;
+    min-height:34px;
+    padding:8px 15px!important;
+    font-size:15px!important;
+    line-height:1!important;
+    letter-spacing:.045em;
+    text-transform:uppercase;
+    font-weight:900!important;
+    border:1px solid currentColor;
+  }
+  .work-order-sheet.status-completed{position:fixed!important;isolation:isolate}
+  .work-order-sheet.status-completed::after{
+    content:"FINALIZADA";
+    position:fixed;
+    z-index:9999;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%) rotate(-17deg);
+    width:min(82vw,760px);
+    padding:18px 24px 14px;
+    border-top:9px solid rgba(20,126,72,.34);
+    border-bottom:9px solid rgba(20,126,72,.34);
+    color:rgba(20,126,72,.24);
+    font-size:clamp(52px,9vw,96px);
+    line-height:.92;
+    font-weight:950;
+    letter-spacing:.08em;
+    text-align:center;
+    text-transform:uppercase;
+    white-space:nowrap;
+    pointer-events:none;
+  }
+  .work-order-sheet.status-completed .work-order-detail .status-completed{color:#147e48;background:#e6f5ec}
+}
+@media print{
+  .work-order-print-host .work-order-detail .status-completed,
+  .work-order-print-host .work-order-detail .status-cancelled{display:inline-flex!important;min-height:26px!important;padding:5px 10px!important;font-size:10pt!important;line-height:1!important;letter-spacing:.04em;text-transform:uppercase;font-weight:900!important;border:1px solid currentColor}
+  .work-order-print-host .work-order-sheet.status-completed{position:static!important;isolation:isolate}
+  .work-order-print-host .work-order-sheet.status-completed::after{content:"FINALIZADA";position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-17deg);width:72%;padding:12px 18px 10px;border-top:7px solid rgba(20,126,72,.30);border-bottom:7px solid rgba(20,126,72,.30);color:rgba(20,126,72,.21);font-size:54pt;line-height:.92;font-weight:950;letter-spacing:.08em;text-align:center;text-transform:uppercase;white-space:nowrap;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }

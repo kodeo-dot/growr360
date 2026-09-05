@@ -920,3 +920,12 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
   .record-detail-v4 .record-inputs-v3-list article{grid-template-columns:minmax(0,1fr) 104px!important}
   .record-detail-v4 .record-inputs-v3-list article>div{padding:10px!important}
 }
+
+
+/* Growr360 v20 · units inline with dose/total values */
+.record-detail-v4 .input-dose,.record-detail-v4 .input-total{display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:flex-start!important}
+.record-detail-v4 .input-measure{display:flex!important;align-items:baseline!important;gap:5px!important;min-width:0!important;margin-top:4px!important;flex-wrap:wrap!important}
+.record-detail-v4 .input-measure strong,.record-detail-v4 .input-measure span{display:inline!important;margin:0!important;line-height:1!important;font-size:18px!important;font-weight:850!important}
+.record-detail-v4 .input-dose .input-measure strong,.record-detail-v4 .input-dose .input-measure span{color:var(--green)!important}
+.record-detail-v4 .input-total .input-measure strong,.record-detail-v4 .input-total .input-measure span{color:var(--ink)!important}
+@media(max-width:480px){.record-detail-v4 .input-measure strong,.record-detail-v4 .input-measure span{font-size:17px!important}}
