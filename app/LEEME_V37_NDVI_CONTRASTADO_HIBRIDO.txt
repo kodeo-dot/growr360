@@ -1,0 +1,6 @@
+Growr360 v37 — NDVI contrastado híbrido
+
+- El NDVI contrastado ahora toma los mismos cortes percentiles del NDVI 5 zonas (20/40/60/80) para adaptarse a cada lote y escena.
+- Mantiene cinco familias de color, con una saturación apenas superior a la vista 5 zonas.
+- Las transiciones alrededor de cada corte se suavizan con interpolación smoothstep (±0.022 NDVI), evitando saltos totalmente duros entre colores.
+- Conserva el enmascarado de nubes/sombras y la lógica de superficie/zonas de v36.

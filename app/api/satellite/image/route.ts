@@ -15,6 +15,30 @@ function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return
 function setup(){return {input:["B04","B08","SCL","dataMask"],output:{bands:4}};}
 function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return [0,0,0,0];let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;let c=colorBlend(v,[-0.2,0,0.2,0.4,0.6,0.8,1],[[0.50,0.28,0.13],[0.78,0.58,0.28],[0.90,0.80,0.31],[0.64,0.75,0.20],[0.31,0.62,0.15],[0.08,0.42,0.12],[0.01,0.23,0.08]]);return [...c,1];}`;
 
+  if (index === "NDVI_CONTRASTED") {
+    const cuts = Array.isArray(thresholds?.cuts) && thresholds!.cuts!.length >= 4 ? thresholds!.cuts!.slice(0,4).map(Number) : [0.2,0.4,0.6,0.8];
+    return `//VERSION=3
+function setup(){return {input:["B04","B08","SCL","dataMask"],output:{bands:4}};}
+function mix3(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+function smooth(a,b,x){let t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);}
+function evaluatePixel(s){
+  if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return [0,0,0,0];
+  let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;
+  let c1=[0.82,0.32,0.07],c2=[0.89,0.64,0.14],c3=[0.73,0.82,0.19],c4=[0.30,0.69,0.23],c5=[0.05,0.46,0.20];
+  let softness=0.022;let c;
+  if(v<${cuts[0]}-softness)c=c1;
+  else if(v<${cuts[0]}+softness)c=mix3(c1,c2,smooth(${cuts[0]}-softness,${cuts[0]}+softness,v));
+  else if(v<${cuts[1]}-softness)c=c2;
+  else if(v<${cuts[1]}+softness)c=mix3(c2,c3,smooth(${cuts[1]}-softness,${cuts[1]}+softness,v));
+  else if(v<${cuts[2]}-softness)c=c3;
+  else if(v<${cuts[2]}+softness)c=mix3(c3,c4,smooth(${cuts[2]}-softness,${cuts[2]}+softness,v));
+  else if(v<${cuts[3]}-softness)c=c4;
+  else if(v<${cuts[3]}+softness)c=mix3(c4,c5,smooth(${cuts[3]}-softness,${cuts[3]}+softness,v));
+  else c=c5;
+  return [c[0],c[1],c[2],1];
+}`;
+  }
+
   if (index === "NDVI_5Z") {
     const cuts = Array.isArray(thresholds?.cuts) && thresholds!.cuts!.length >= 4 ? thresholds!.cuts!.slice(0,4).map(Number) : [0.2,0.4,0.6,0.8];
     return `//VERSION=3

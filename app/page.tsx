@@ -1282,7 +1282,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     setSatelliteScene(scene);
     setSatelliteLoading(true); setSatelliteError("");
     try {
-      const zoneCount = safeIndex === "NDVI_5Z" ? 5 : safeIndex === "NDVI_3Z" ? 3 : null;
+      const zoneCount = (safeIndex === "NDVI_5Z" || safeIndex === "NDVI_CONTRASTED") ? 5 : safeIndex === "NDVI_3Z" ? 3 : null;
       const thresholds = zoneCount ? await loadNdviZones(feature, scene.date, zoneCount) : null;
       if (!zoneCount) setSatelliteZoneStats(null);
       const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index: safeIndex, thresholds }) });
