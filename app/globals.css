@@ -1087,3 +1087,127 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
 .sat-plan-note-v30{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--green) 28%,var(--line));border-radius:9px;background:color-mix(in srgb,var(--mint) 55%,var(--paper))}.sat-plan-note-v30>span{flex:0 0 auto;font-size:7px;line-height:1;font-weight:900;letter-spacing:.08em;color:var(--green);padding:4px 5px;border-radius:6px;background:var(--card);border:1px solid color-mix(in srgb,var(--green) 20%,var(--line))}.sat-plan-note-v30 p{margin:0;font-size:8px;line-height:1.35;color:var(--muted)}.sat-plan-note-v30 b{color:var(--ink)}
 .sat-zones-v30{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.sat-zones-v30>span{display:flex;align-items:center;gap:5px;min-width:0;padding:6px 7px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-size:8px;color:var(--muted);white-space:nowrap}.sat-zones-v30 b{font-size:8px;color:var(--ink)}.sat-zones-v30 i{width:8px;height:8px;border-radius:50%;flex:0 0 8px}.sat-zones-v30 i.low{background:#d97706}.sat-zones-v30 i.mid{background:#a3c63a}.sat-zones-v30 i.high{background:#16803a}
 @media(max-width:760px){.sat-zones-v30{grid-template-columns:1fr}.sat-zones-v30>span{justify-content:flex-start}}
+
+/* v31 — satellite micro panel / compact HUD */
+.satellite-panel.real-satellite.satellite-panel-v28{
+  left:18px!important;
+  bottom:68px!important;
+  width:min(430px,calc(100% - 150px))!important;
+  max-height:min(430px,calc(100% - 92px))!important;
+  border-radius:15px!important;
+  border:1px solid color-mix(in srgb,var(--line) 88%,var(--green) 12%)!important;
+  box-shadow:0 14px 38px rgba(7,23,17,.22)!important;
+  background:color-mix(in srgb,var(--card) 97%,var(--mint) 3%)!important;
+}
+.satellite-panel-v28 .satellite-top-v28{
+  min-height:44px!important;
+  padding:7px 8px 7px 10px!important;
+  border-bottom:1px solid var(--line)!important;
+  background:var(--card)!important;
+}
+.satellite-panel-v28 .sat-title-v28{gap:7px!important}
+.satellite-panel-v28 .sat-icon-v28{
+  width:27px!important;height:27px!important;flex-basis:27px!important;
+  border-radius:8px!important;box-shadow:none!important;
+}
+.satellite-panel-v28 .sat-icon-v28 svg{width:14px!important}
+.satellite-panel-v28 .sat-title-v28>span:last-child{display:flex!important;align-items:baseline!important;gap:6px!important;min-width:0!important}
+.satellite-panel-v28 .sat-title-v28 .eyebrow{display:none!important}
+.satellite-panel-v28 .sat-title-v28 strong{font-size:11px!important;font-weight:850!important;white-space:nowrap!important}
+.satellite-panel-v28 .sat-title-v28 small{font-size:7.5px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:150px!important}
+.satellite-panel-v28 .sat-window-actions{gap:4px!important}
+.satellite-panel-v28 .sat-window-actions button{
+  width:26px!important;height:26px!important;border-radius:7px!important;
+  border-color:transparent!important;background:var(--paper)!important;
+}
+.satellite-panel-v28 .sat-window-actions svg{width:13px!important}
+.sat-body-v29{
+  padding:8px!important;
+  gap:6px!important;
+  overflow:auto!important;
+  max-height:calc(min(430px,calc(100vh - 92px)) - 44px)!important;
+}
+.sat-toolbar-v29{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 118px!important;
+  gap:6px!important;
+  align-items:center!important;
+}
+.satellite-panel-v28 .sat-plot-picker-v29{display:block!important;position:relative!important}
+.satellite-panel-v28 .sat-plot-picker-v29>span{display:none!important}
+.satellite-panel-v28 .sat-plot-picker-v29 select{
+  width:100%!important;height:30px!important;border-radius:8px!important;
+  font-size:9px!important;padding:0 26px 0 8px!important;background:var(--paper)!important;
+}
+.sat-opacity-v29{
+  display:grid!important;grid-template-columns:auto 1fr!important;align-items:center!important;
+  height:30px!important;margin:0!important;padding:0 7px!important;border-radius:8px!important;gap:6px!important;
+  background:var(--paper)!important;
+}
+.sat-opacity-v29>span{display:flex!important;align-items:center!important;gap:3px!important;white-space:nowrap!important}
+.sat-opacity-v29>span>span{display:none!important}
+.sat-opacity-v29>span>b{font-size:8px!important;color:var(--muted)!important}
+.sat-opacity-v29 input{height:10px!important;margin:0!important;min-width:0!important}
+.satellite-panel-v28 .sat-selector-v29{
+  gap:4px!important;padding:0 0 2px!important;margin:0!important;
+  scrollbar-width:none!important;
+}
+.satellite-panel-v28 .sat-selector-v29::-webkit-scrollbar{display:none!important}
+.satellite-panel-v28 .sat-selector-v29 button{
+  min-height:24px!important;padding:4px 7px!important;border-radius:7px!important;
+  font-size:7.5px!important;font-weight:850!important;
+  background:var(--paper)!important;border-color:var(--line)!important;color:var(--muted)!important;
+}
+.satellite-panel-v28 .sat-selector-v29 button.active{
+  background:var(--deep)!important;color:#fff!important;border-color:var(--deep)!important;box-shadow:none!important;
+}
+.sat-plan-note-v30{
+  padding:5px 7px!important;gap:6px!important;border-radius:7px!important;
+  background:color-mix(in srgb,var(--mint) 35%,var(--card))!important;
+}
+.sat-plan-note-v30>span{font-size:6.5px!important;padding:3px 4px!important}
+.sat-plan-note-v30 p{font-size:7px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.sat-zones-v30{gap:4px!important}
+.sat-zones-v30>span{padding:4px 5px!important;border-radius:7px!important;font-size:7px!important;gap:4px!important}
+.sat-zones-v30 b{font-size:7px!important}
+.sat-zones-v30 i{width:6px!important;height:6px!important;flex-basis:6px!important}
+.sat-loading-v29{font-size:8px!important;padding:2px 0!important}
+.sat-history-v29{gap:4px!important}
+.sat-history-head-v29{align-items:center!important}
+.sat-history-head-v29>div{display:flex!important;align-items:baseline!important;gap:6px!important;min-width:0!important}
+.sat-history-head-v29 strong{font-size:9px!important;white-space:nowrap!important}
+.sat-history-head-v29 small{font-size:7px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:180px!important}
+.sat-history-head-v29>span{font-size:6.5px!important;padding:3px 5px!important}
+.sat-filmstrip-v29{
+  gap:5px!important;padding:0 0 2px!important;scrollbar-width:none!important;
+}
+.sat-filmstrip-v29::-webkit-scrollbar{display:none!important}
+.sat-filmstrip-v29 button{
+  flex:0 0 92px!important;border-radius:8px!important;background:var(--paper)!important;
+}
+.sat-filmstrip-v29 .sentinel-preview-image,.sat-filmstrip-v29 .sentinel-preview{
+  height:44px!important;
+}
+.sat-filmstrip-v29 .sat-date-copy{padding:4px 5px!important;gap:0!important}
+.sat-filmstrip-v29 .sat-date-copy b{font-size:7.5px!important}
+.sat-filmstrip-v29 .sat-date-copy small{font-size:6.5px!important}
+.satellite-panel-v28.minimized{
+  width:min(255px,calc(100% - 150px))!important;
+  max-height:42px!important;border-radius:13px!important;
+}
+.satellite-panel-v28.minimized .satellite-top-v28{min-height:42px!important;padding:6px 7px!important}
+.satellite-panel-v28.minimized .sat-title-v28 small{max-width:100px!important}
+
+@media(max-width:760px){
+  .satellite-panel.real-satellite.satellite-panel-v28{
+    left:8px!important;right:54px!important;bottom:64px!important;width:auto!important;
+    max-height:min(390px,calc(100% - 130px))!important;border-radius:13px!important;
+  }
+  .sat-body-v29{max-height:calc(min(390px,calc(100vh - 130px)) - 44px)!important;padding:7px!important}
+  .sat-toolbar-v29{grid-template-columns:minmax(0,1fr) 102px!important}
+  .sat-filmstrip-v29 button{flex-basis:86px!important}
+  .sat-filmstrip-v29 .sentinel-preview-image,.sat-filmstrip-v29 .sentinel-preview{height:41px!important}
+  .sat-history-head-v29 small{max-width:120px!important}
+  .sat-zones-v30{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .satellite-panel-v28.minimized{right:auto!important;width:min(235px,calc(100% - 70px))!important}
+}
