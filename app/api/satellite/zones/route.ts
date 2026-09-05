@@ -162,6 +162,12 @@ export async function POST(request: Request) {
     const stats = (interval?.outputs?.ndvi?.bands?.B0?.stats ?? {}) as Stats;
     const sampleCount = finite(stats.sampleCount) ?? 0;
     const noDataCount = finite(stats.noDataCount) ?? 0;
+    // sampleCount covers the whole request bounding box. noDataCount also includes
+    // pixels outside the parcel geometry, so sampleCount - noDataCount is the
+    // number of valid NDVI pixels but sampleCount is NOT the right denominator
+    // for parcel coverage. Sentinel Hub exposes geometryPixelCount specifically
+    // for the number of raster pixels intersecting the requested geometry.
+    const geometryPixelCount = finite(data?.geometryPixelCount) ?? 0;
     const validPixels = Math.max(0, sampleCount - noDataCount);
     const percentileRows = percentileValues(stats);
     const min = finite(stats.min);
@@ -183,7 +189,11 @@ export async function POST(request: Request) {
     }
 
     const plotAreaHa = geometryAreaHa(geometry);
-    const clearFraction = sampleCount > 0 ? Math.min(1, Math.max(0, validPixels / sampleCount)) : 1;
+    // Coverage must be relative to pixels that actually intersect the lot.
+    // Using sampleCount here underestimates irregular/diagonal lots because it
+    // includes the empty corners of their bounding box as no-data.
+    const coverageDenominator = geometryPixelCount > 0 ? geometryPixelCount : validPixels;
+    const clearFraction = coverageDenominator > 0 ? Math.min(1, Math.max(0, validPixels / coverageDenominator)) : 1;
     const clearAreaHa = plotAreaHa * clearFraction;
     const zoneStatsData = await requestZoneShares(token, geometry, payload.date, numericCuts);
     const zoneInterval = (zoneStatsData?.data ?? []).find((entry: any) => entry?.outputs) ?? zoneStatsData?.data?.[0];
@@ -214,6 +224,7 @@ export async function POST(request: Request) {
       min,
       max,
       validPixels,
+      geometryPixelCount,
       plotAreaHa,
       clearAreaHa,
       clearCoverage: plotAreaHa > 0 ? (clearAreaHa / plotAreaHa) * 100 : 100,

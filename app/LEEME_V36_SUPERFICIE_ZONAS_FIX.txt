@@ -1,0 +1,10 @@
+Growr360 v36 — corrección de superficie analizada en zonas NDVI
+
+Problema corregido:
+La cobertura del lote se calculaba como píxeles válidos / sampleCount. En Sentinel Hub, sampleCount corresponde al bounding box completo y no solamente al polígono del lote. Por eso lotes irregulares podían mostrar, por ejemplo, ~37 ha analizadas sobre más de 80 ha aun con una escena despejada.
+
+Corrección:
+- Se usa geometryPixelCount como denominador de cobertura del lote.
+- Los píxeles fuera del polígono ya no reducen artificialmente la superficie analizada.
+- Las hectáreas de las zonas siguen sumando la superficie realmente válida/despejada.
+- Si hay nubes reales dentro del lote, la cobertura puede seguir siendo menor al 100%, como corresponde.
