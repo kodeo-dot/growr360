@@ -1,0 +1,9 @@
+Growr360 v32 — fix NDVI 3 zonas
+
+- Corrige el evalscript del Statistical API: NDVI ahora es un output explícito de 1 banda y dataMask otro output explícito.
+- Corrige calculations para apuntar a ndvi / B0, que es la forma real de la respuesta estadística.
+- Usa rango temporal [día, día siguiente) para evitar bordes de fecha.
+- Detecta errores de intervalo aunque Sentinel Hub responda HTTP 200.
+- Informa cantidad real de píxeles válidos cuando una escena está demasiado cubierta por nubes.
+- Mantiene percentiles 33/67 como método principal.
+- Si un proveedor/proxy devuelve min/max válidos pero omite percentiles, usa división del rango en tercios como fallback para no bloquear la función.
