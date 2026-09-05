@@ -820,7 +820,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       {groupId && activePlan === "free" && view !== "planes" && <button className="free-plan-nudge" onClick={()=>openView("planes")}><span><TrendingUp/></span><div><strong>¿Necesitás gestionar más hectáreas?</strong><small>Conocé Growr360 Pro y ampliá la capacidad de tu grupo.</small></div><ChevronRight/></button>}
       {groupBrowserOpen && <GroupBrowser memberships={memberships} onClose={() => setGroupBrowserOpen(false)} onMembershipChanged={() => void loadWorkspace()}/>} 
       {!groupId ? <EmptyWorkspace onGroups={() => setGroupBrowserOpen(true)}/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} settings={settings} onSettingsChange={setSettings} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} planLotBlocked={planLotLimitReached||planHectareLimitReached} planBlockReason={planBlockReason} planHectaresUsed={planHectaresUsed} planHectareLimit={planHectareLimit} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} settings={settings} onSettingsChange={setSettings} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} plan={activePlan} canManageLots={canManageLots} planLotBlocked={planLotLimitReached||planHectareLimitReached} planBlockReason={planBlockReason} planHectaresUsed={planHectaresUsed} planHectareLimit={planHectareLimit} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields") && !planFieldLimitReached} onCreate={() => { const reason=planBlockReason("field"); if(reason){setError(reason);return;} setPendingForm("field"); }} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
         {view === "contratistas" && <ContractorsView contractors={contractors} canManage={hasPermission("create_records")} onCreateContractor={()=>setPendingForm("contractor")}/>}
         {view === "registros" && <RealRecordsView mode="records" records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
@@ -843,11 +843,11 @@ function AuthenticatedApp({ session }: { session: Session }) {
   </div>;
 }
 
-function RealMapView({ fields, plots, records, campaigns, assignments, cropColors, crops, settings, onSettingsChange, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, planLotBlocked, planBlockReason, planHectaresUsed, planHectareLimit, onCreateRecord, onSaved }: {
+function RealMapView({ fields, plots, records, campaigns, assignments, cropColors, crops, settings, onSettingsChange, selectedPlot, setSelectedPlot, groupId, userId, plan, canManageLots, planLotBlocked, planBlockReason, planHectaresUsed, planHectareLimit, onCreateRecord, onSaved }: {
   fields: Field[]; plots: Plot[]; records: RecordRow[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
   campaigns: Campaign[]; assignments: PlotCampaign[]; cropColors: CropColor[]; crops: Crop[]; settings: AppSettings; onSettingsChange:(value:AppSettings)=>void;
   onCreateRecord: (plot: Plot, type: string) => void;
-  groupId: string; userId: string; canManageLots: boolean; planLotBlocked:boolean; planBlockReason:(kind:"field"|"lot",extraArea?:number)=>string; planHectaresUsed:number; planHectareLimit:number|null; onSaved: () => void;
+  groupId: string; userId: string; plan: string; canManageLots: boolean; planLotBlocked:boolean; planBlockReason:(kind:"field"|"lot",extraArea?:number)=>string; planHectaresUsed:number; planHectareLimit:number|null; onSaved: () => void;
 }) {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -870,6 +870,11 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [satelliteOpacity, setSatelliteOpacity] = useState(.82);
   const [satellitePlotId, setSatellitePlotId] = useState("");
   const [satellitePreviews, setSatellitePreviews] = useState<Record<string, string>>({});
+  const [satelliteZoneStats, setSatelliteZoneStats] = useState<{ low:number; high:number; min?:number; max?:number } | null>(null);
+  const satelliteAdvanced = plan !== "free";
+  const satelliteFreeIndices = ["RGB", "NDVI"];
+  const satelliteProIndices = ["RGB", "NDVI", "NDVI_CONTINUOUS", "NDVI_3Z", "NDVI_CONTRASTED", "FALSE_COLOR", "NDRE", "SAVI", "EVI"];
+  const satelliteIndices = satelliteAdvanced ? satelliteProIndices : satelliteFreeIndices;
   const [detailRecord, setDetailRecord] = useState<RecordRow | null>(null);
   const [campaignFilterId, setCampaignFilterId] = useState("");
   const [monitoringDays, setMonitoringDays] = useState<number | null>(null);
@@ -887,6 +892,12 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   ], [plotLabelFields.join("|")]);
   const recordsRef = useRef(records);
   useEffect(() => { recordsRef.current = records; }, [records]);
+  useEffect(() => {
+    if (!satelliteAdvanced && !satelliteFreeIndices.includes(satelliteIndex)) {
+      setSatelliteIndex("NDVI");
+      setSatelliteZoneStats(null);
+    }
+  }, [satelliteAdvanced, satelliteIndex]);
   const activeCampaignId = campaigns.find(campaign => campaign.status === "active")?.id;
   const preferredCampaignId = campaignFilterId || activeCampaignId;
   const visiblePlotIds = useMemo(() => {
@@ -1226,8 +1237,11 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       const response = await fetch("/api/satellite/scenes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: geometry(target.geometry_json) }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "No se pudieron consultar las imágenes.");
-      setSatelliteScenes(payload.scenes ?? []); setSatelliteScene(payload.scenes?.[0] ?? null);
-      void loadSatellitePreviews(target, (payload.scenes ?? []).slice(0, 10), satelliteIndex);
+      const allScenes = (payload.scenes ?? []) as SatelliteScene[];
+      const allowedScenes = satelliteAdvanced ? allScenes : allScenes.slice(0, 1);
+      setSatelliteScenes(allowedScenes); setSatelliteScene(allowedScenes[0] ?? null);
+      setSatelliteZoneStats(null);
+      void loadSatellitePreviews(target, allowedScenes.slice(0, satelliteAdvanced ? 10 : 1), satelliteIndex);
     } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo consultar Sentinel-2."); }
     setSatelliteLoading(false);
   }
@@ -1240,23 +1254,36 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   }
   async function loadSatellitePreviews(target: MapPlot, scenes: SatelliteScene[], index: string) {
     const feature = geometry(target.geometry_json); if (!feature) return;
+    const safeIndex = !satelliteAdvanced && !satelliteFreeIndices.includes(index) ? "NDVI" : (index === "NDVI_3Z" ? "NDVI_CONTINUOUS" : index);
     const entries = await Promise.all(scenes.map(async scene => {
-      try { const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index, thumbnail: true }) }); if (!response.ok) return [scene.id, ""] as const; return [scene.id, URL.createObjectURL(await response.blob())] as const; } catch { return [scene.id, ""] as const; }
+      try { const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index: safeIndex, thumbnail: true }) }); if (!response.ok) return [scene.id, ""] as const; return [scene.id, URL.createObjectURL(await response.blob())] as const; } catch { return [scene.id, ""] as const; }
     }));
     setSatellitePreviews(Object.fromEntries(entries));
+  }
+  async function loadNdviZones(feature: GeoFeature, date: string) {
+    if (!satelliteAdvanced) return null;
+    const response = await fetch("/api/satellite/zones", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date }) });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "No se pudieron calcular las zonas NDVI.");
+    const zones = { low:Number(payload.low), high:Number(payload.high), min:Number(payload.min), max:Number(payload.max) };
+    setSatelliteZoneStats(zones);
+    return zones;
   }
   async function showSatellite(scene = satelliteScene, index = satelliteIndex) {
     const target = mapPlots.find(plot => plot.id === satellitePlotId); const feature = target && geometry(target.geometry_json);
     if (!scene || !feature || !mapRef.current) return;
+    const safeIndex = !satelliteAdvanced && !satelliteFreeIndices.includes(index) ? "NDVI" : index;
     setSatelliteLoading(true); setSatelliteError("");
     try {
-      const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index }) });
+      const thresholds = safeIndex === "NDVI_3Z" ? await loadNdviZones(feature, scene.date) : null;
+      if (safeIndex !== "NDVI_3Z") setSatelliteZoneStats(null);
+      const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index: safeIndex, thresholds }) });
       if (!response.ok) { const payload = await response.json(); throw new Error(payload.error || "No se pudo procesar la imagen."); }
       const blob = await response.blob(); const url = URL.createObjectURL(blob); const bounds = featureBounds(feature);
       const source = mapRef.current.getSource("sentinel-image") as maplibregl.ImageSource | undefined;
       source?.updateImage({ url, coordinates: [[bounds.west,bounds.north],[bounds.east,bounds.north],[bounds.east,bounds.south],[bounds.west,bounds.south]] });
       mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", satelliteOpacity);
-      setSatelliteScene(scene); fitPlots(mapRef.current, mapPlots.filter(plot => plot.id === target.id));
+      setSatelliteScene(scene); setSatelliteIndex(safeIndex); fitPlots(mapRef.current, mapPlots.filter(plot => plot.id === target.id));
     } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo mostrar la imagen."); }
     setSatelliteLoading(false);
   }
@@ -1318,11 +1345,14 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     {draft && <PlotForm key={`${draft.properties?.imported_name??"drawn"}-${draft.geometry.coordinates[0][0]?.join(",")}`} feature={draft} fields={fields} groupId={groupId} userId={userId} planBlockReason={planBlockReason} onCancel={()=>{if(importQueue.length)advanceImported();else cancelDrawing();}} onSaved={()=>{if(importQueue.length)advanceImported();else{cancelDrawing();onSaved();}}}/>} 
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
     {satelliteOpen && <aside className={`satellite-panel real-satellite satellite-panel-v28${satelliteMinimized?" minimized":""}`}><div className="sat-top satellite-top-v28"><div className="sat-title-v28"><span className="sat-icon-v28"><Satellite/></span><span><span className="eyebrow">PLANET INSIGHTS · SENTINEL-2</span><strong>Imágenes satelitales</strong>{satelliteMinimized&&satelliteScene&&<small>{satelliteIndexName(satelliteIndex)} · {formatDate(satelliteScene.date)}</small>}</span></div><div className="sat-window-actions"><button onClick={() => setSatelliteMinimized(value => !value)} title={satelliteMinimized?"Maximizar":"Minimizar"} aria-label={satelliteMinimized?"Maximizar panel":"Minimizar panel"}>{satelliteMinimized?<Maximize2/>:<Minimize2/>}</button><button onClick={() => setSatelliteOpen(false)} title="Cerrar" aria-label="Cerrar imágenes satelitales"><X/></button></div></div>
-      {!satelliteMinimized&&<div className="sat-body-v28">
-        <div className="sat-controls-v28"><label className="sat-plot-picker"><span>Lote</span><select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
-        <div className="sat-selector">{["RGB","NDVI","NDVI_CONTRASTED","FALSE_COLOR","NDRE"].map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, 10), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div></div>
-        {satelliteLoading && <div className="sat-loading"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
-        {!!satelliteScenes.length && <><div className="sat-opacity"><span><span>Opacidad de la capa</span><b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div><div className="history sat-history-v28"><div className="sat-history-head"><strong>Historial</strong><small>{satelliteIndexName(satelliteIndex)} · {satelliteScenes.length} imágenes</small></div><div className="dates">{satelliteScenes.slice(0, 12).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<span className="sat-date-copy"><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes · {scene.satellite}</small></span></button>)}</div></div></>}
+      {!satelliteMinimized&&<div className="sat-body-v29">
+        <div className="sat-toolbar-v29"><label className="sat-plot-picker sat-plot-picker-v29"><span>Lote</span><select value={satellitePlotId} onChange={e => void loadSatelliteScenes(e.target.value)}><option value="">Seleccionar lote…</option>{mapPlots.map(plot => <option key={plot.id} value={plot.id}>{plot.name} · {plot.fieldName}</option>)}</select></label>
+        <div className="sat-opacity sat-opacity-v29"><span><span>Opacidad</span><b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div></div>
+        <div className="sat-selector sat-selector-v29">{satelliteIndices.map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, satelliteAdvanced ? 10 : 1), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
+        {!satelliteAdvanced && <div className="sat-plan-note-v30"><span>FREE</span><p>Incluye la última imagen con <b>RGB</b> y <b>NDVI</b>. Historial, zonas e índices avanzados están disponibles desde Pro.</p></div>}
+        {satelliteIndex === "NDVI_3Z" && satelliteZoneStats && <div className="sat-zones-v30"><span><i className="low"/>Baja <b>≤ {satelliteZoneStats.low.toFixed(2)}</b></span><span><i className="mid"/>Media <b>{satelliteZoneStats.low.toFixed(2)}–{satelliteZoneStats.high.toFixed(2)}</b></span><span><i className="high"/>Alta <b>&gt; {satelliteZoneStats.high.toFixed(2)}</b></span></div>}
+        {satelliteLoading && <div className="sat-loading sat-loading-v29"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
+        {!!satelliteScenes.length && <div className="history sat-history-v29"><div className="sat-history-head sat-history-head-v29"><div><strong>{satelliteAdvanced?"Historial":"Última imagen"}</strong><small>{satelliteAdvanced?`${satelliteScenes.length} imágenes disponibles`:"El historial completo se habilita desde Pro"}</small></div><span>{satelliteIndexName(satelliteIndex)}</span></div><div className="sat-filmstrip-v29">{satelliteScenes.slice(0, satelliteAdvanced ? 12 : 1).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<span className="sat-date-copy"><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes</small></span></button>)}</div></div>}
       </div>}
     </aside>}
     {recentOpen&&!drawing&&!draft&&<aside className="lot-panel operational-panel recent-map-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">ACTIVIDAD DEL EQUIPO</span><h2>Últimos registros</h2><h3>Más recientes primero</h3></div><button className="icon-button" onClick={()=>setRecentOpen(false)}><X/></button></div><PlotActivitySection title="Actividad reciente" icon={History} rows={[...records].filter(row=>row.record_type!=="monitoring").sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date))).slice(0,6)} onOpen={setDetailRecord}/></aside>}
@@ -2350,7 +2380,7 @@ function featureBounds(feature: GeoFeature) {
   const points = feature.geometry.coordinates[0] ?? [];
   return { west: Math.min(...points.map(p => p[0])), east: Math.max(...points.map(p => p[0])), south: Math.min(...points.map(p => p[1])), north: Math.max(...points.map(p => p[1])) };
 }
-function satelliteIndexName(value: string) { return ({ RGB: "RGB natural", NDVI: "NDVI", NDVI_CONTRASTED: "NDVI contrastado", FALSE_COLOR: "Falso color", NDRE: "NDRE" } as Record<string, string>)[value] ?? value; }
+function satelliteIndexName(value: string) { return ({ RGB: "RGB natural", NDVI: "NDVI", NDVI_CONTINUOUS: "NDVI continuo", NDVI_3Z: "NDVI 3 zonas", NDVI_CONTRASTED: "NDVI contrastado", FALSE_COLOR: "Falso color", NDRE: "NDRE", SAVI: "SAVI", EVI: "EVI" } as Record<string, string>)[value] ?? value; }
 function fitPlots(map: MapLibreMap, plots: MapPlot[]) {
   const coordinates = plots.flatMap(plot => plot.feature.geometry.coordinates[0] ?? []);
   if (!coordinates.length) return;

@@ -1,0 +1,10 @@
+Growr360 v30 — satélite por plan + nuevos índices + NDVI 3 zonas
+
+- FREE: solo la escena satelital más reciente y únicamente RGB + NDVI.
+- PRO/BUSINESS: historial completo visible y todos los índices avanzados.
+- Índices nuevos: NDVI continuo, SAVI y EVI.
+- NDVI 3 zonas (PRO/BUSINESS): calcula percentiles 33,33% y 66,67% del NDVI del lote para la fecha elegida usando Sentinel Hub Statistical API y pinta Baja / Media / Alta.
+- Los píxeles de nube/sombra se excluyen con SCL antes de calcular percentiles.
+- No intenta replicar código propietario de OneSoil. La aproximación sigue su concepto público de dividir una imagen NDVI en zonas de manejo, pero usa una implementación propia por cuantiles.
+
+IMPORTANTE: el gate de plan de esta versión se aplica en la UI usando el plan efectivo del grupo. Para impedir consumo directo de /api/satellite/* por fuera de la UI, conviene agregar validación server-side de sesión/grupo/plan en esas rutas cuando el proyecto completo tenga disponible el helper de Supabase del servidor.
