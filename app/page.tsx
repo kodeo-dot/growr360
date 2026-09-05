@@ -76,7 +76,19 @@ type Contractor = { id:string;group_id:string;name:string;phone?:string|null;doc
 type RecordAttachment = { id:string; record_id:string; file_name:string; storage_path:string; mime_type?:string|null; size_bytes?:number|null };
 type ResolvedAttachment = RecordAttachment & { url:string };
 type Supply = { id:string; name:string; category:string; unit:string; unit_price:number|string; currency:string };
-type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean };
+type PlotLabelField = "plot_name"|"field_name"|"campaign"|"sowing_variety"|"sowing_date"|"last_crop"|"area"|"yield_per_ha";
+type AppSettings = { appearance: string; area_unit: string; date_format: string; notifications_enabled: boolean; plot_label_fields?: PlotLabelField[] | null };
+const DEFAULT_PLOT_LABEL_FIELDS: PlotLabelField[] = ["plot_name"];
+const PLOT_LABEL_OPTIONS: Array<{id:PlotLabelField;label:string;hint:string}> = [
+  {id:"plot_name",label:"Nombre del lote",hint:"Ej. Lote 2"},
+  {id:"field_name",label:"Nombre del campo",hint:"Ej. El Ñato"},
+  {id:"campaign",label:"Campaña",hint:"La campaña más reciente del lote"},
+  {id:"sowing_variety",label:"Variedad de siembra",hint:"Solo toma la variedad registrada en una siembra"},
+  {id:"sowing_date",label:"Fecha de siembra",hint:"Fecha del último registro de siembra"},
+  {id:"last_crop",label:"Último cultivo",hint:"Último cultivo registrado o monitoreado"},
+  {id:"area",label:"Superficie",hint:"Superficie sembrable del lote"},
+  {id:"yield_per_ha",label:"Rendimiento / ha",hint:"Último rendimiento de cosecha disponible"}
+];
 type SubscriptionPlan = { code:"free"|"pro"|"business";name:string;max_hectares:number|null;max_fields:number|null;max_lots:number|null;max_users:number|null;max_kml_imports:number|null;features:string[];monthly_price_usd:number;annual_price_usd:number;included_hectares:number|null;extra_hectare_price_year_usd:number };
 type GroupSubscription = { id:string;group_id:string;plan:"free"|"pro"|"business";status:"active"|"trialing"|"expired"|"cancelled";started_at:string;expires_at?:string|null };
 // Single source of truth for the group's effective plan: public.group_subscriptions, scoped by group_id.
@@ -584,7 +596,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [contractors,setContractors]=useState<Contractor[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
-  const [settings, setSettings] = useState<AppSettings>({ appearance: "system", area_unit: "ha", date_format: "dd-MM-yyyy", notifications_enabled: true });
+  const [settings, setSettings] = useState<AppSettings>({ appearance: "system", area_unit: "ha", date_format: "dd-MM-yyyy", notifications_enabled: true, plot_label_fields: DEFAULT_PLOT_LABEL_FIELDS });
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
   const [pendingRecord, setPendingRecord] = useState<{ plotId: string; type: string } | null>(null);
   const [pendingForm, setPendingForm] = useState<"field"|"campaign"|"client"|"contractor"|"record"|null>(null);
@@ -631,7 +643,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       supabase.from("crops").select("id,name,group_id").or(`group_id.is.null,group_id.eq.${targetGroup}`).is("deleted_at", null).order("name"),
       supabase.from("plot_campaigns").select("plot_id,campaign_id,crop_id,campaigns(id,name,status),crops(id,name)").eq("group_id", targetGroup).is("deleted_at", null),
       supabase.from("group_crop_colors").select("crop_id,color").eq("group_id", targetGroup),
-      supabase.from("app_settings").select("appearance,area_unit,date_format,notifications_enabled").eq("group_id", targetGroup).eq("user_id", session.user.id).maybeSingle()
+      supabase.from("app_settings").select("appearance,area_unit,date_format,notifications_enabled,plot_label_fields").eq("group_id", targetGroup).eq("user_id", session.user.id).maybeSingle()
       ,supabase.from("campaigns").select("id,name,start_date,end_date,status").eq("group_id", targetGroup).is("deleted_at", null).order("start_date", { ascending: false })
       ,supabase.from("clients").select("id,name,cuit,phone,email").eq("group_id", targetGroup).is("deleted_at", null).order("name")
       ,supabase.from("inputs").select("id,name,category,unit,unit_price,currency").eq("group_id", targetGroup).is("deleted_at", null).order("name")
@@ -785,7 +797,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       {error && <div className="global-error">{error}<button onClick={() => setError("")}><X/></button></div>}
       {groupBrowserOpen && <GroupBrowser memberships={memberships} onClose={() => setGroupBrowserOpen(false)} onMembershipChanged={() => void loadWorkspace()}/>} 
       {!groupId ? <EmptyWorkspace onGroups={() => setGroupBrowserOpen(true)}/> : <>
-        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
+        {view === "mapa" && <RealMapView fields={fields} plots={plots} records={records} campaigns={campaigns} assignments={assignments} cropColors={cropColors} crops={crops} settings={settings} onSettingsChange={setSettings} selectedPlot={selectedPlot} setSelectedPlot={plot => setSelectedPlotId(plot?.id ?? null)} groupId={groupId} userId={session.user.id} canManageLots={canManageLots} onCreateRecord={(plot,type) => { setPendingRecord({ plotId: plot.id, type }); setPendingForm("record"); setView("registros"); }} onSaved={() => void loadGroupData(groupId, true)}/>}
         {view === "campos" && <RealFieldsView fields={fields} plots={resolvePlotCrops(plots, records, assignments, cropColors, crops)} canCreate={hasPermission("manage_fields")} onCreate={() => setPendingForm("field")} onOpenPlot={plot => { setSelectedPlotId(plot.id); setView("mapa"); }}/>} 
         {view === "contratistas" && <ContractorsView contractors={contractors} canManage={hasPermission("create_records")} onCreateContractor={()=>setPendingForm("contractor")}/>}
         {view === "registros" && <RealRecordsView mode="records" records={records} canCreate={hasPermission("create_records")} onCreate={() => setPendingForm("record")}/>} 
@@ -807,9 +819,9 @@ function AuthenticatedApp({ session }: { session: Session }) {
   </div>;
 }
 
-function RealMapView({ fields, plots, records, campaigns, assignments, cropColors, crops, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onCreateRecord, onSaved }: {
+function RealMapView({ fields, plots, records, campaigns, assignments, cropColors, crops, settings, onSettingsChange, selectedPlot, setSelectedPlot, groupId, userId, canManageLots, onCreateRecord, onSaved }: {
   fields: Field[]; plots: Plot[]; records: RecordRow[]; selectedPlot: Plot | null; setSelectedPlot: (plot: Plot | null) => void;
-  campaigns: Campaign[]; assignments: PlotCampaign[]; cropColors: CropColor[]; crops: Crop[];
+  campaigns: Campaign[]; assignments: PlotCampaign[]; cropColors: CropColor[]; crops: Crop[]; settings: AppSettings; onSettingsChange:(value:AppSettings)=>void;
   onCreateRecord: (plot: Plot, type: string) => void;
   groupId: string; userId: string; canManageLots: boolean; onSaved: () => void;
 }) {
@@ -840,6 +852,8 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
   const [baseMap, setBaseMap] = useState<"satellite" | "streets">("satellite");
   const [mapQuery, setMapQuery] = useState("");
+  const [plotLabelSaving,setPlotLabelSaving]=useState(false);
+  const plotLabelFields = (settings.plot_label_fields?.length ? settings.plot_label_fields : DEFAULT_PLOT_LABEL_FIELDS) as PlotLabelField[];
   const recordsRef = useRef(records);
   useEffect(() => { recordsRef.current = records; }, [records]);
   const activeCampaignId = campaigns.find(campaign => campaign.status === "active")?.id;
@@ -874,6 +888,17 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     if (!feature) return null;
     return { ...plot, feature, fieldName: relation(plot.fields)?.name ?? fields.find(field => field.id === plot.field_id)?.name ?? "Campo" };
   }).filter(Boolean) as MapPlot[], [displayPlots, fields]);
+  const mapPlotLabels = useMemo(() => new globalThis.Map(mapPlots.map(plot => [plot.id, buildPlotMapLabel(plot, records, assignments, campaigns, preferredCampaignId, plotLabelFields)])), [mapPlots, records, assignments, campaigns, preferredCampaignId, plotLabelFields.join("|")]);
+  async function updatePlotLabels(field:PlotLabelField,checked:boolean){
+    const current=plotLabelFields;
+    let next=checked?Array.from(new Set([...current,field])):current.filter(item=>item!==field);
+    if(!next.length)next=DEFAULT_PLOT_LABEL_FIELDS;
+    const nextSettings={...settings,plot_label_fields:next};
+    onSettingsChange(nextSettings);setPlotLabelSaving(true);
+    const {error}=await supabase.from("app_settings").upsert({group_id:groupId,user_id:userId,appearance:settings.appearance,area_unit:settings.area_unit,date_format:settings.date_format,notifications_enabled:settings.notifications_enabled,plot_label_fields:next},{onConflict:"group_id,user_id"});
+    setPlotLabelSaving(false);
+    if(error)console.error("No se pudieron guardar las etiquetas del mapa:",error.message);
+  }
   const mapSearchResults = useMemo(() => {
     const query = normalizeText(mapQuery.trim());
     if (!query) return [];
@@ -892,7 +917,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       type: "FeatureCollection" as const,
       features: mapPlots.map(plot => ({
         ...plot.feature,
-        properties: { id: plot.id, name: plot.name, color: plotColor(plot, layer) }
+        properties: { id: plot.id, name: plot.name, label: mapPlotLabels.get(plot.id) || plot.name, color: plotColor(plot, layer) }
       }))
     };
     (map.getSource("plots") as GeoJSONSource | undefined)?.setData(collection);
@@ -925,7 +950,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       })
     });
     if (map.getLayer("plot-fill")) map.setPaintProperty("plot-fill", "fill-opacity", layer === "sin-relleno" ? 0 : .48);
-  }, [mapPlots, layer, points, monitoringRecords]);
+  }, [mapPlots, mapPlotLabels, layer, points, monitoringRecords]);
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return;
@@ -953,7 +978,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       map.addLayer({ id: "plot-fill", type: "fill", source: "plots", paint: { "fill-color": ["get", "color"], "fill-opacity": .48 } });
       map.addLayer({ id: "sentinel-layer", type: "raster", source: "sentinel-image", paint: { "raster-opacity": .82, "raster-fade-duration": 0 } });
       map.addLayer({ id: "plot-line", type: "line", source: "plots", paint: { "line-color": "#ffffff", "line-width": 1.7 } });
-      map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "name"], "text-size": 13, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
+      map.addLayer({ id: "plot-label", type: "symbol", source: "plots", layout: { "text-field": ["get", "label"], "text-size": 12.5, "text-line-height": 1.18, "text-max-width": 16, "text-allow-overlap": false }, paint: { "text-color": "#ffffff", "text-halo-color": "#0b2018", "text-halo-width": 3 } });
       map.addLayer({ id: "monitoring-points", type: "circle", source: "monitorings", paint: { "circle-radius": 8, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
       map.addLayer({ id: "draw-fill", type: "fill", source: "drawing", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#63dc42", "fill-opacity": .28 } });
       map.addLayer({ id: "draw-line", type: "line", source: "drawing", paint: { "line-color": "#a7ff79", "line-width": 3 } });
@@ -1206,7 +1231,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     {!drawing && !draft && <div className="map-bottom-tools"><button onClick={() => mapRef.current && fitPlots(mapRef.current, mapPlots)} title="Ver todos los lotes"><MapPin/></button><button onClick={openRecentRecords} title="Últimos registros"><History/></button><button onClick={()=>kmzInput.current?.click()} disabled={!canManageLots} title="Importar KML o KMZ"><FileUp/></button><button onClick={()=>void exportKmz()} title={selectedPlot?"Exportar lote en KMZ":"Exportar todos los lotes en KMZ"}><Download/></button><button onClick={onSaved} title="Actualizar datos"><RotateCcw/></button><input ref={kmzInput} hidden type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" onChange={event=>event.target.files?.[0]&&void importKmz(event.target.files[0])}/></div>}
     {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
     {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days">{[7,15,30,-1].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days < 0 ? "Todos" : `${days} días`}</button>)}</div><button className="monitoring-hide" onClick={() => setMonitoringDays(null)}><EyeOff/>Ocultar monitoreos</button><small>“Todos” incluye la campaña activa completa. Solo aparecen monitoreos con GPS válido.</small></div>}
-    {layerPanelOpen && <div className="layer-switcher"><div><Layers3/><span>Visualización</span></div>{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div>}
+    {layerPanelOpen && <div className="layer-switcher premium-layer-switcher"><div className="layer-switcher-title"><div><Layers3/><span>Visualización</span></div><button className="layer-close" onClick={()=>setLayerPanelOpen(false)} aria-label="Cerrar"><X/></button></div><div className="layer-style-options">{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div><div className="plot-label-config"><header><div><strong>Etiquetas del lote</strong><small>Elegí qué información querés leer directamente sobre el mapa.</small></div>{plotLabelSaving&&<LoaderCircle className="spin"/>}</header><div>{PLOT_LABEL_OPTIONS.map(option=><label key={option.id}><input type="checkbox" checked={plotLabelFields.includes(option.id)} onChange={event=>void updatePlotLabels(option.id,event.target.checked)}/><span><strong>{option.label}</strong><small>{option.hint}</small></span></label>)}</div></div></div>}
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm key={`${draft.properties?.imported_name??"drawn"}-${draft.geometry.coordinates[0][0]?.join(",")}`} feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={()=>{if(importQueue.length)advanceImported();else cancelDrawing();}} onSaved={()=>{if(importQueue.length)advanceImported();else{cancelDrawing();onSaved();}}}/>} 
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"sowing")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
@@ -1262,15 +1287,18 @@ function PlotForm({ feature, fields, groupId, userId, onCancel, onSaved }: {
 
 function RealPlotPanel({ plot, fieldName, records, onRecord, onNewRecord, onMonitoring, onSatellite, onClose }: { plot: Plot; fieldName: string; records: RecordRow[]; onRecord: (record: RecordRow) => void; onNewRecord: () => void; onMonitoring: () => void; onSatellite: () => void; onClose: () => void }) {
   const ordered = [...records].sort((a,b) => String(b.record_date).localeCompare(String(a.record_date)));
-  const monitorings = ordered.filter(row => row.record_type === "monitoring").slice(0, 5);
-  const activities = ordered.filter(row => row.record_type !== "monitoring").slice(0, 5);
-  return <aside className="lot-panel operational-panel"><div className="panel-handle"/><div className="lot-head"><div><span className="eyebrow">CAMPO</span><h2>{fieldName}</h2><h3>{plot.name}</h3></div><button className="icon-button" onClick={onClose}><X/></button></div>
-    <div className="lot-metrics"><div><small>Superficie</small><strong>{number(plot.arable_area).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha</strong></div><div><small>Cultivo actual</small><strong><i style={{ background: plot.cropColor || "#77847e" }}/>{plot.cropName || "Sin cultivo"}</strong></div></div>
-    <div className="quick-actions plot-actions"><button onClick={onSatellite}><Satellite/>Imágenes satelitales</button><button onClick={onNewRecord}><Plus/>Nuevo registro</button><button onClick={onMonitoring}><Activity/>Monitorear</button></div>
-    <PlotActivitySection title="Últimos registros" icon={FileText} rows={activities} onOpen={onRecord}/>
-    <PlotActivitySection title="Últimos monitoreos" icon={Activity} rows={monitorings} onOpen={onRecord}/>
+  const monitorings = ordered.filter(row => effectiveRecordType(row) === "monitoring").slice(0, 5);
+  const activities = ordered.filter(row => effectiveRecordType(row) !== "monitoring").slice(0, 5);
+  const summary=plotOperationalSummary(plot,ordered);
+  return <aside className="lot-panel operational-panel plot-summary-panel"><div className="panel-handle"/><header className="plot-summary-head"><div className="plot-summary-title"><span className="plot-summary-kicker">{fieldName}</span><h2>{plot.name}</h2><div className="plot-summary-crop"><i style={{background:plot.cropColor||"#77847e"}}/><span>{summary.lastCrop||plot.cropName||"Sin cultivo registrado"}</span></div></div><button className="icon-button" onClick={onClose} aria-label="Cerrar lote"><X/></button></header>
+    <section className="plot-summary-overview"><div className="plot-summary-primary"><small>SUPERFICIE</small><strong>{number(plot.arable_area).toLocaleString("es-AR",{maximumFractionDigits:2})}<span> ha</span></strong></div><div className="plot-summary-primary"><small>CAMPAÑA</small><strong>{summary.campaign||"—"}</strong></div><div className="plot-summary-primary"><small>ÚLTIMA ACTIVIDAD</small><strong>{summary.lastActivity?formatDate(summary.lastActivity.record_date):"—"}</strong><span>{summary.lastActivity?recordType(effectiveRecordType(summary.lastActivity)):"Sin actividad"}</span></div></section>
+    <section className="plot-summary-details"><div className="plot-summary-section-title"><span>Resumen productivo</span><small>Información tomada del historial del lote</small></div><div className="plot-summary-grid"><PlotSummaryItem icon={Sprout} label="Último cultivo" value={summary.lastCrop||plot.cropName||"Sin informar"}/><PlotSummaryItem icon={CalendarDays} label="Fecha de siembra" value={summary.sowingDate?formatDate(summary.sowingDate):"Sin siembra registrada"}/><PlotSummaryItem icon={Leaf} label="Variedad de siembra" value={summary.sowingVariety||"Sin informar"}/><PlotSummaryItem icon={TrendingUp} label="Rendimiento / ha" value={summary.yieldPerHa||"Sin cosecha registrada"}/></div></section>
+    <div className="quick-actions plot-actions plot-summary-actions"><button onClick={onSatellite}><Satellite/><span>Satélite</span></button><button onClick={onNewRecord}><Plus/><span>Nuevo registro</span></button><button onClick={onMonitoring}><Activity/><span>Monitorear</span></button></div>
+    <div className="plot-summary-history"><PlotActivitySection title="Últimos registros" icon={FileText} rows={activities} onOpen={onRecord}/><PlotActivitySection title="Últimos monitoreos" icon={Activity} rows={monitorings} onOpen={onRecord}/></div>
   </aside>;
 }
+
+function PlotSummaryItem({icon:Icon,label,value}:{icon:typeof Activity;label:string;value:string}){return <div className="plot-summary-item"><span><Icon/></span><div><small>{label}</small><strong>{value}</strong></div></div>;}
 
 function PlotActivitySection({ title, icon: Icon, rows, onOpen }: { title: string; icon: typeof Activity; rows: RecordRow[]; onOpen: (record: RecordRow) => void }) {
   return <section><div className="section-title"><div><Icon/>{title}</div><span>{rows.length}</span></div>{rows.map(row => <button className="activity-row activity-button" key={row.id} onClick={() => onOpen(row)}><div className="activity-icon"><Leaf/></div><div><strong>{recordType(row.record_type)}{recordCrop(row) ? ` · ${recordCrop(row)}` : ""}</strong><small>{relation(row.campaigns)?.name || "Sin campaña"} · {formatDate(row.record_date)}{effectiveRecordType(row)!=="monitoring" ? ` · ${number(row.worked_area).toLocaleString("es-AR")} ha` : ""}</small></div><ChevronRight/></button>)}{!rows.length && <p className="panel-empty">No hay información cargada.</p>}</section>;
@@ -1760,6 +1788,7 @@ function RealSettingsView({ mode, groupId, userId, settings, group, canManageGro
       <label>Unidad de superficie<select value={draft.area_unit} onChange={e => setDraft({ ...draft, area_unit: e.target.value })}><option value="ha">Hectáreas (ha)</option><option value="m2">Metros cuadrados (m²)</option></select></label>
       <label>Formato de fecha<select value={draft.date_format} onChange={e => setDraft({ ...draft, date_format: e.target.value })}><option value="dd-MM-yyyy">Día-mes-año</option><option value="dd/MM/yyyy">Día/mes/año</option><option value="yyyy-MM-dd">Año-mes-día</option></select></label>
       <label className="settings-check"><input type="checkbox" checked={draft.notifications_enabled} onChange={e => setDraft({ ...draft, notifications_enabled: e.target.checked })}/><span><strong>Notificaciones</strong><small>Recibir avisos operativos del grupo.</small></span></label>
+      <section className="settings-map-labels"><header><div><MapPin/><span><strong>Etiquetas de los lotes</strong><small>Definí qué datos aparecen escritos directamente sobre cada lote en el mapa.</small></span></div></header><div>{PLOT_LABEL_OPTIONS.map(option=>{const selected=(draft.plot_label_fields?.length?draft.plot_label_fields:DEFAULT_PLOT_LABEL_FIELDS).includes(option.id);return <label key={option.id}><input type="checkbox" checked={selected} onChange={event=>{const current=(draft.plot_label_fields?.length?draft.plot_label_fields:DEFAULT_PLOT_LABEL_FIELDS) as PlotLabelField[];let next=event.target.checked?Array.from(new Set([...current,option.id])):current.filter(item=>item!==option.id);if(!next.length)next=DEFAULT_PLOT_LABEL_FIELDS;setDraft({...draft,plot_label_fields:next})}}/><span><strong>{option.label}</strong><small>{option.hint}</small></span></label>})}</div></section>
       {message && <p className={/(guardad|actualizad|eliminad)/i.test(message) ? "save-success" : "form-error"}>{message}</p>}<button className="settings-save" disabled={saving} onClick={save}>{saving ? <LoaderCircle className="spin"/> : <Save/>}Guardar cambios</button>
     </section>}
     {mode==="group"&&(canManageGroup?<section className="content-card group-settings group-settings-premium"><div className="settings-title"><Users/><div><h3>Identidad del grupo</h3><p>Estos datos se muestran al equipo y al buscar el grupo.</p></div></div><div className="group-image-editor"><div>{groupImageUrl?<img src={groupImageUrl} alt={`Imagen de ${groupName||"grupo"}`}/>:<ImageIcon/>}</div><section><strong>Foto institucional</strong><small>JPG, PNG o WebP · máximo 5 MB. Recomendamos una imagen horizontal.</small><label className="group-upload"><UploadCloud/>Elegir imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setGroupImage(event.target.files?.[0]??null)}/></label>{(groupImageUrl||group?.image_path)&&<button className="group-remove-image" type="button" onClick={()=>void removeGroupImage()}>Quitar imagen</button>}</section></div><div className="group-settings-fields"><label>Nombre del grupo<input maxLength={120} value={groupName} onChange={e=>setGroupName(e.target.value)}/></label><label>CUIT<input inputMode="numeric" maxLength={11} value={groupCuit} onChange={e=>setGroupCuit(e.target.value.replace(/\D/g,"").slice(0,11))}/></label><label className="wide">Descripción<textarea maxLength={500} placeholder="Contá brevemente quiénes son y cómo trabajan…" value={groupDescription} onChange={e=>setGroupDescription(e.target.value)}/><small>{groupDescription.length}/500</small></label></div><div className="group-settings-actions group-settings-actions-clean"><span>Los cambios se aplican a todos los integrantes del grupo.</span><button className="settings-save" disabled={saving||!groupName.trim()||groupCuit.length!==11} onClick={()=>void saveGroup()}>{saving?<LoaderCircle className="spin"/>:<Save/>}Guardar cambios</button></div></section>:<section className="content-card settings-help"><SlidersHorizontal/><h3>Configuración del grupo</h3><p>Solo el propietario y los administradores pueden modificar los datos institucionales.</p></section>)}
@@ -2120,6 +2149,39 @@ function normalizeText(value: string) { return value.normalize("NFD").replace(/[
 function monitoringPriorityColor(level: number) { return (["#2E7D32", "#7CB342", "#FBC02D", "#F57C00", "#D32F2F"])[Math.max(1, Math.min(5, level)) - 1]; }
 function normalizePriorityColor(value?: string | null) { const color = String(value ?? "").toUpperCase(); return ({ RED: "#D32F2F", YELLOW: "#FBC02D", GREEN: "#388E3C" } as Record<string,string>)[color] ?? color; }
 function normalizeCropName(value: string) { return normalizeText(value); }
+function plotOperationalSummary(plot:Plot,records:RecordRow[]){
+  const ordered=[...records].filter(row=>row.plot_id===plot.id).sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date)));
+  const sowing=ordered.find(row=>effectiveRecordType(row)==="sowing");
+  const sowingData=sowing?recordData(sowing):{};
+  const harvest=ordered.find(row=>effectiveRecordType(row)==="harvest");
+  const harvestData=harvest?recordData(harvest):{};
+  const cropRecord=ordered.find(row=>recordCrop(row));
+  let yieldPerHa="";
+  if(harvest){
+    const area=number((harvestData.harvested_area??harvest.worked_area) as string|number);
+    const production=number(harvestData.total_production as string|number);
+    const yieldValue=number(harvestData.yield_per_ha as string|number)||(area>0?production/area:0);
+    const unit=String(harvestData.unit||"kg").trim()||"kg";
+    if(yieldValue>0)yieldPerHa=`${yieldValue.toLocaleString("es-AR",{maximumFractionDigits:1})} ${unit}/ha`;
+  }
+  return {campaign:relation(ordered[0]?.campaigns)?.name||"",lastCrop:cropRecord?recordCrop(cropRecord):"",sowingDate:sowing?.record_date||"",sowingVariety:String(sowingData.variety||"").trim(),yieldPerHa,lastActivity:ordered[0]||null};
+}
+function buildPlotMapLabel(plot:MapPlot,records:RecordRow[],assignments:PlotCampaign[],campaigns:Campaign[],preferredCampaignId:string|undefined,fields:PlotLabelField[]){
+  const plotRecords=records.filter(row=>row.plot_id===plot.id).sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date)));
+  const preferredRecords=preferredCampaignId?plotRecords.filter(row=>row.campaign_id===preferredCampaignId):plotRecords;
+  const contextual=preferredRecords.length?preferredRecords:plotRecords;
+  const sowing=plotRecords.find(row=>effectiveRecordType(row)==="sowing");
+  const sowingData=sowing?recordData(sowing):{};
+  const harvest=plotRecords.find(row=>effectiveRecordType(row)==="harvest");
+  const harvestData=harvest?recordData(harvest):{};
+  const lastCropRecord=plotRecords.find(row=>recordCrop(row));
+  const assignment=assignments.find(item=>item.plot_id===plot.id&&item.campaign_id===preferredCampaignId)||assignments.find(item=>item.plot_id===plot.id&&relation(item.campaigns)?.status==="active")||assignments.find(item=>item.plot_id===plot.id);
+  const campaignName=relation(contextual[0]?.campaigns)?.name||relation(assignment?.campaigns)?.name||campaigns.find(item=>item.id===preferredCampaignId)?.name||"";
+  let yieldText="";
+  if(harvest){const area=number((harvestData.harvested_area??harvest.worked_area) as string|number);const production=number(harvestData.total_production as string|number);const value=number(harvestData.yield_per_ha as string|number)||(area>0?production/area:0);const unit=String(harvestData.unit||"kg").trim()||"kg";if(value>0)yieldText=`Rinde ${value.toLocaleString("es-AR",{maximumFractionDigits:1})} ${unit}/ha`;}
+  const values:Record<PlotLabelField,string>={plot_name:plot.name,field_name:plot.fieldName,campaign:campaignName?`Camp. ${campaignName}`:"",sowing_variety:String(sowingData.variety||"").trim()?`Var. ${String(sowingData.variety).trim()}`:"",sowing_date:sowing?.record_date?`Siembra ${formatDate(sowing.record_date)}`:"",last_crop:(lastCropRecord?recordCrop(lastCropRecord):plot.cropName)?`Cultivo ${lastCropRecord?recordCrop(lastCropRecord):plot.cropName}`:"",area:`${number(plot.arable_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha`,yield_per_ha:yieldText};
+  return fields.map(field=>values[field]).filter(Boolean).join("\n")||plot.name;
+}
 function resolvePlotCrops(plots: Plot[], records: RecordRow[], assignments: PlotCampaign[], colors: CropColor[], crops: Crop[], preferredCampaignId?: string) {
   return plots.map(plot => {
     const plotRecords = records.filter(row => row.plot_id === plot.id && recordCrop(row));

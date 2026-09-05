@@ -1,0 +1,18 @@
+Growr360 v10 · Resumen premium de lote + etiquetas configurables
+
+1. Ejecutar MAP_PLOT_LABELS.sql una sola vez en Supabase → SQL Editor.
+2. Desplegar esta versión.
+3. En Mapa → Capas → Etiquetas del lote se puede elegir qué información aparece sobre los polígonos.
+4. La misma configuración también está en Configuración → Ajustes personales.
+
+Opciones disponibles:
+- Nombre del lote
+- Nombre del campo
+- Campaña
+- Variedad del último registro de siembra (solo si fue registrada en una siembra)
+- Fecha del último registro de siembra
+- Último cultivo registrado/monitoreado
+- Superficie
+- Último rendimiento/ha de cosecha
+
+Al tocar un lote se muestra un resumen productivo más completo, pero se conservan los accesos rápidos y el historial de registros/monitoreos.
