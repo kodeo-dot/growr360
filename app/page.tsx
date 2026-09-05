@@ -1279,7 +1279,7 @@ function PlotActivitySection({ title, icon: Icon, rows, onOpen }: { title: strin
 function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => void }) {
   const details = recordData(record);
   const actualType=effectiveRecordType(record);
-  const observations=String(details.observations??"").trim();
+  const observations=String(details.observations??record.observations??"").trim();
   const entries=visibleDetails(details).filter(([key])=>key!=="observations"&&!/^input_\d+_/.test(key)&&key!=="input_count"&&!['crop_source_record_id','crop_source'].includes(key));
   const inputs=recordInputDetails(details,number(record.worked_area));
   const costs=entries.filter(([key])=>/(cost|price|income|margin|inputs_total)/.test(key));
@@ -1289,21 +1289,54 @@ function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => v
   const excluded=new Set([...costs,...gps,...monitoring,...samples].map(([key])=>key));
   const technical=entries.filter(([key])=>!excluded.has(key));
   const crop=recordCrop(record);
-  return <div className="record-detail-backdrop"><article className={`record-detail-sheet record-detail-v2 ${actualType==="monitoring"?"monitoring-detail-v2":""}`}>
-    <header className="record-detail-v2-head"><button className="page-back-button" onClick={onClose}><ChevronLeft/>Volver</button><div className="record-detail-v2-title"><span className="eyebrow">{actualType === "monitoring" ? "MONITOREO DE LOTE" : actualType === "napa" ? "MEDICIÓN DE NAPA" : "REGISTRO OPERATIVO"}</span><h2>{recordType(actualType)}</h2><p>{relation(record.fields)?.name || "Campo"} <span>·</span> {relation(record.plots)?.name || "Sin lote"}</p></div></header>
-    <section className="record-detail-v2-overview"><div className="record-detail-main-fact"><small>{actualType==="monitoring"?"CULTIVO OBSERVADO":"CULTIVO"}</small><strong>{crop||"Sin cultivo informado"}</strong><span>{formatDate(record.record_date)}</span></div><div><small>Campaña</small><strong>{relation(record.campaigns)?.name || "Sin campaña"}</strong></div>{actualType!=="napa"&&<div><small>Superficie</small><strong>{number(record.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</strong></div>}<div><small>Lote</small><strong>{relation(record.plots)?.name||"Sin lote"}</strong></div></section>
-    {(record.contractor||record.machinery_text)&&<section className="record-quick-strip"><div><Tractor/><span><small>EJECUCIÓN</small><strong>{record.contractor||"Sin contratista"}</strong></span></div>{record.machinery_text&&<div><Settings2/><span><small>MAQUINARIA</small><strong>{record.machinery_text}</strong></span></div>}</section>}
+  const fieldName=relation(record.fields)?.name || "Campo sin informar";
+  const plotName=relation(record.plots)?.name || "Lote sin informar";
+  const campaignName=relation(record.campaigns)?.name || "Sin campaña";
+  const area=number(record.worked_area);
+  return <div className="record-detail-backdrop"><article className={`record-detail-sheet record-detail-v3 ${actualType==="monitoring"?"monitoring-detail-v3":""}`}>
+    <header className="record-detail-v3-head">
+      <button className="record-detail-back" onClick={onClose}><ChevronLeft/>Volver</button>
+      <div className="record-detail-identity">
+        <span className={`record-detail-type type-${actualType}`}><RecordTypeIcon type={actualType}/>{recordType(actualType)}</span>
+        <h2>{fieldName} <span>·</span> {plotName}</h2>
+        <p><CalendarDays/>{formatDate(record.record_date)}<span>•</span>{campaignName}</p>
+      </div>
+      <div className="record-detail-crop-hero"><small>{actualType==="monitoring"?"CULTIVO OBSERVADO":"CULTIVO"}</small><strong>{crop||"Sin cultivo informado"}</strong></div>
+    </header>
+
+    <section className="record-detail-facts">
+      <RecordFact icon={CalendarDays} label="Fecha" value={formatDate(record.record_date)}/>
+      <RecordFact icon={MapPin} label="Ubicación" value={`${fieldName} · ${plotName}`}/>
+      <RecordFact icon={Sprout} label="Campaña" value={campaignName}/>
+      {actualType!=="napa"&&<RecordFact icon={Grid2X2} label="Superficie" value={area>0?`${area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"No informada"}/>} 
+    </section>
+
+    {(record.contractor||record.machinery_text)&&<section className="record-detail-execution"><div className="record-detail-section-heading"><Tractor/><div><span>EJECUCIÓN</span><h3>Quién y con qué se realizó</h3></div></div><div className="record-detail-data-grid">{record.contractor&&<DataTile label="Contratista / responsable" value={record.contractor}/>} {record.machinery_text&&<DataTile label="Maquinaria" value={record.machinery_text}/>}</div></section>}
+
     {actualType==="monitoring"&&<MonitoringHealthBlock details={details} entries={monitoring}/>} 
-    {inputs.length>0&&<section className="record-inputs-v2"><div className="detail-section-title"><Leaf/><div><h3>Insumos aplicados</h3><p>Dosis destacada para lectura rápida</p></div></div><div className="record-inputs-table"><div className="record-inputs-table-head"><span>INSUMO</span><span>DOSIS</span><span>TOTAL</span></div>{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <div className="record-inputs-table-row" key={input.index}><strong>{input.name||`Insumo ${input.index+1}`}</strong><b>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} {rateUnit}</b><span>{perHa?`${input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2})} ${totalUnit}`:"Según base tratada"}</span></div>})}</div></section>}
-    {observations&&<ObservationBlock value={observations}/>} 
-    <div className="record-secondary-groups">{technical.length>0&&<RecordDetailGroup title="Datos técnicos" text="Parámetros adicionales de la labor" icon={SlidersHorizontal} entries={technical}/>} {samples.length>0&&<RecordDetailGroup title="Muestras de suelo" text="Resultados organizados por muestra" icon={MapPin} entries={samples}/>} {costs.length>0&&<RecordDetailGroup title="Costos" text="Importes y valores económicos" icon={CreditCard} entries={costs}/>} {gps.length>0&&<RecordDetailGroup title="Ubicación GPS" text="Coordenadas y precisión de captura" icon={LocateFixed} entries={gps}/>}</div>
-    {!inputs.length&&!monitoring.length&&!technical.length&&!samples.length&&!costs.length&&!gps.length&&!observations&&<section><EmptyLine text="Este registro no tiene datos adicionales."/></section>}
-    <RecordAttachments recordId={record.id}/>
+
+    {inputs.length>0&&<section className="record-detail-section record-detail-inputs-v3"><div className="record-detail-section-heading"><Leaf/><div><span>INSUMOS</span><h3>Productos y dosis aplicadas</h3><p>La dosis queda destacada para poder leerla de un vistazo.</p></div></div><div className="record-inputs-v3-list">{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <article key={input.index}><div className="input-product"><small>INSUMO</small><strong>{input.name||`Insumo ${input.index+1}`}</strong></div><div className="input-dose"><small>DOSIS</small><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})}</strong><span>{rateUnit}</span></div><div className="input-total"><small>TOTAL</small><strong>{perHa?input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2}):"—"}</strong><span>{perHa?totalUnit:"Según base tratada"}</span></div></article>})}</div></section>}
+
+    {technical.length>0&&<RecordDetailPanel title="Datos de la labor" eyebrow="DATOS TÉCNICOS" icon={SlidersHorizontal} entries={technical}/>} 
+    {samples.length>0&&<RecordDetailPanel title="Resultados de muestras" eyebrow="MUESTRAS DE SUELO" icon={MapPin} entries={samples}/>} 
+    {costs.length>0&&<RecordDetailPanel title="Costos y valores" eyebrow="ECONOMÍA" icon={CreditCard} entries={costs} emphasis/>} 
+    {gps.length>0&&<RecordDetailPanel title="Ubicación registrada" eyebrow="GPS" icon={LocateFixed} entries={gps}/>} 
+    {observations&&<section className="record-detail-section record-observations-v3"><div className="record-detail-section-heading"><FileText/><div><span>OBSERVACIONES</span><h3>Notas del registro</h3></div></div><p>{observations}</p></section>} 
+    {!inputs.length&&!monitoring.length&&!technical.length&&!samples.length&&!costs.length&&!gps.length&&!observations&&<section className="record-detail-section"><EmptyLine text="Este registro no tiene datos adicionales."/></section>}
+    <section className="record-detail-section record-attachments-v3"><RecordAttachments recordId={record.id}/></section>
   </article></div>;
 }
 
-function RecordDetailGroup({title,text,icon:Icon,entries}:{title:string;text:string;icon:typeof Activity;entries:[string,unknown][]}){
-  return <details className="record-detail-collapsible"><summary><div><Icon/><span><strong>{title}</strong><small>{text} · {entries.length} dato{entries.length===1?"":"s"}</small></span></div><ChevronDown/></summary><div className="record-detail-collapsible-grid">{entries.map(([key,value])=><div key={key}><small>{detailLabel(key)}</small><strong>{formatDetailValue(key,value)}</strong></div>)}</div></details>;
+function RecordFact({icon:Icon,label,value}:{icon:typeof Activity;label:string;value:string}){
+  return <div className="record-fact"><span><Icon/></span><div><small>{label}</small><strong>{value}</strong></div></div>;
+}
+
+function DataTile({label,value}:{label:string;value:React.ReactNode}){
+  return <div className="record-data-tile"><small>{label}</small><strong>{value}</strong></div>;
+}
+
+function RecordDetailPanel({title,eyebrow,icon:Icon,entries,emphasis=false}:{title:string;eyebrow:string;icon:typeof Activity;entries:[string,unknown][];emphasis?:boolean}){
+  return <section className={`record-detail-section record-detail-panel-v3 ${emphasis?"emphasis":""}`}><div className="record-detail-section-heading"><Icon/><div><span>{eyebrow}</span><h3>{title}</h3></div><b>{entries.length}</b></div><div className="record-detail-data-grid">{entries.map(([key,value])=><DataTile key={key} label={detailLabel(key)} value={formatDetailValue(key,value)}/>)}</div></section>;
 }
 
 function MonitoringHealthBlock({details,entries}:{details:Record<string,unknown>;entries:[string,unknown][]}){
@@ -1385,53 +1418,27 @@ function RealFieldsView({ fields, plots, onOpenPlot, canCreate, onCreate }: { fi
 function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { records: RecordRow[]; canCreate:boolean; onCreate:()=>void; mode?:"records"|"monitoring" }) {
   const [query, setQuery] = useState("");
   const [selected,setSelected]=useState<RecordRow|null>(null);
-  const [typeFilter,setTypeFilter]=useState("all");
+  const visible = records.filter(row => (mode === "monitoring" ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row))) && JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
   const monitoring = mode === "monitoring";
-  const base = records.filter(row => monitoring ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row)));
-  const availableTypes=Array.from(new Set(base.map(effectiveRecordType))).sort((a,b)=>recordType(a).localeCompare(recordType(b),"es"));
-  const normalizedQuery=query.trim().toLowerCase();
-  const visible = base.filter(row => (monitoring||typeFilter==="all"||effectiveRecordType(row)===typeFilter) && (!normalizedQuery||[recordType(effectiveRecordType(row)),relation(row.fields)?.name,relation(row.plots)?.name,relation(row.campaigns)?.name,recordCrop(row),JSON.stringify(recordData(row))].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery))).sort((a,b)=>String(b.record_date).localeCompare(String(a.record_date))||String(b.created_at||"").localeCompare(String(a.created_at||"")));
-  const monthKey=new Date().toISOString().slice(0,7);
-  const thisMonth=base.filter(row=>String(row.record_date).slice(0,7)===monthKey).length;
-  const fieldCount=new Set(base.map(row=>row.field_id).filter(Boolean)).size;
-  return <div className={`page-content record-hub ${monitoring?"monitoring-hub":"activity-hub"}`}>
-    <PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Lecturas de lote claras, priorizadas y fáciles de comparar." : "Historial operativo del grupo, ordenado para encontrar cada labor rápido."} action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>:undefined}/>
-    <section className="record-hub-summary"><div><small>{monitoring?"MONITOREOS":"REGISTROS"}</small><strong>{base.length}</strong><span>total cargados</span></div><div><small>ESTE MES</small><strong>{thisMonth}</strong><span>nuevos</span></div><div><small>ALCANCE</small><strong>{fieldCount}</strong><span>campo{fieldCount===1?"":"s"}</span></div></section>
-    <section className="record-directory">
-      <header className="record-directory-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar por campo, lote o cultivo…" : "Buscar por campo, lote, cultivo o labor…"}/></div>{!monitoring&&<select className="record-type-filter" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="all">Todos los tipos</option>{availableTypes.map(type=><option key={type} value={type}>{recordType(type)}</option>)}</select>}<span className="record-result-count">{visible.length} resultado{visible.length===1?"":"s"}</span></header>
-      <div className="record-ledger">{visible.map(row => <button type="button" className="record-ledger-row" key={row.id} onClick={()=>setSelected(row)}>
-        <RecordDateStamp value={row.record_date}/>
-        <div className="record-ledger-main"><div className="record-ledger-kicker"><span className={`record-kind kind-${effectiveRecordType(row)}`}>{monitoring?<><Eye/>Monitoreo</>:recordType(effectiveRecordType(row))}</span>{recordCrop(row)&&<span className="record-crop"><Leaf/>{recordCrop(row)}</span>}</div><h3>{relation(row.fields)?.name ?? "Campo"}<span>·</span>{relation(row.plots)?.name ?? "Sin lote"}</h3><p>{[relation(row.campaigns)?.name,row.worked_area!=null?`${number(row.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:""].filter(Boolean).join(" · ")}</p></div>
-        {monitoring?<MonitoringListSummary row={row}/>:<RecordListSummary row={row}/>}<ChevronRight className="record-open-icon"/>
-      </button>)}{!visible.length && <div className="record-directory-empty"><Search/><strong>{monitoring ? "No encontramos monitoreos" : "No encontramos registros"}</strong><span>Probá con otro campo, lote, cultivo o filtro.</span></div>}</div>
-    </section>{selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>}</div>;
-}
-
-function RecordDateStamp({value}:{value:string}){
-  const raw=String(value||"");const date=new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw)?`${raw}T12:00:00`:raw);if(Number.isNaN(date.getTime()))return <time className="record-date-stamp"><strong>—</strong><small>{raw}</small></time>;
-  return <time className="record-date-stamp" dateTime={raw}><strong>{String(date.getDate()).padStart(2,"0")}</strong><small>{new Intl.DateTimeFormat("es-AR",{month:"short"}).format(date).replace(".","")}</small><em>{date.getFullYear()}</em></time>;
+  return <div className="page-content"><PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Seguimiento del estado de los cultivos, plagas, malezas y enfermedades." : "Siembras, aplicaciones, cosechas, labores y análisis del grupo."} action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>:undefined}/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar monitoreo por campo o lote…" : "Buscar por campo, lote o tipo…"}/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <button type="button" className="record-card interactive-card" key={row.id} onClick={()=>setSelected(row)}><div className="record-type-icon">{monitoring ? <Eye/> : <RecordTypeIcon type={effectiveRecordType(row)}/>}</div><div className="record-main"><span>{recordType(effectiveRecordType(row))}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><div className="record-context"><small>{formatDate(row.record_date)}</small><i/><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small>{row.worked_area!=null&&<><i/><small>{number(row.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</small></>}</div></div><RecordListSummary row={row}/><ChevronRight className="record-open-icon"/></button>)}{!visible.length && <EmptyLine text={monitoring ? "No hay monitoreos para mostrar." : "No hay registros para mostrar."}/>}</div>{selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>}</div>;
 }
 
 function RecordListSummary({row}:{row:RecordRow}){
   const type=effectiveRecordType(row);
   const details=recordData(row);
   if(type==="harvest"){
-    const total=number((details.total_production??details.production) as string|number);const area=number((details.harvested_area??row.worked_area) as string|number);const yieldPerHa=number(details.yield_per_ha as string|number)||(area>0?total/area:0);const unit=String(details.unit||"kg");
-    return <div className="record-ledger-highlight"><small>RENDIMIENTO</small><strong>{yieldPerHa.toLocaleString("es-AR",{maximumFractionDigits:0})} {unit}/ha</strong><span>{total.toLocaleString("es-AR",{maximumFractionDigits:0})} {unit} total</span></div>;
+    const total=number((details.total_production??details.production) as string|number);
+    const area=number((details.harvested_area??row.worked_area) as string|number);
+    const yieldPerHa=number(details.yield_per_ha as string|number)||(area>0?total/area:0);
+    const unit=String(details.unit||"kg");
+    return <div className="record-list-summary harvest-summary"><span><small>Producción</small><strong>{total.toLocaleString("es-AR",{maximumFractionDigits:0})} {unit}</strong></span><span><small>Rendimiento</small><strong>{yieldPerHa.toLocaleString("es-AR",{maximumFractionDigits:0})} {unit}/ha</strong></span></div>;
   }
   if(["sowing","spraying","fertilization"].includes(type)){
     const inputs=recordInputDetails(details,number(row.worked_area)).filter(input=>input.name);
-    if(!inputs.length)return <div className="record-ledger-highlight muted"><small>INSUMOS</small><strong>Sin informar</strong></div>;
-    const first=inputs[0];const rateUnit=first.unit.includes("/")?first.unit:`${first.unit||"u"}/ha`;
-    return <div className="record-ledger-highlight"><small>{inputs.length===1?"INSUMO":`${inputs.length} INSUMOS`}</small><strong>{first.name}</strong><span>{first.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} {rateUnit}{inputs.length>1?` · +${inputs.length-1} más`:""}</span></div>;
+    if(!inputs.length)return <div className="record-list-summary muted-summary">Sin insumos informados</div>;
+    return <div className="record-list-summary input-summary">{inputs.slice(0,3).map(input=><span key={`${input.index}-${input.name}`}><strong>{input.name}</strong><small>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:2})} {input.unit||"u"}/ha</small></span>)}{inputs.length>3&&<em>+{inputs.length-3} más</em>}</div>;
   }
-  const label=String(details.work_type||details.title||recordCrop(row)||"").trim();
-  return <div className="record-ledger-highlight muted"><small>DETALLE</small><strong>{label||"Sin detalle adicional"}</strong></div>;
-}
-
-function MonitoringListSummary({row}:{row:RecordRow}){
-  const details=recordData(row);const priority=Math.max(1,Math.min(5,Math.round(number(details.monitoring_priority as string|number)||3)));const phenological=String(details.phenological_stage??details.phenological??"").trim();
-  return <div className="monitoring-ledger-status"><span className={`monitoring-priority priority-${priority}`}><i/>{severityName(priority)}</span>{phenological&&<small>{phenological}</small>}<em>Prioridad {priority}/5</em></div>;
+  return <div className="record-list-summary muted-summary">{recordCrop(row)||String(details.work_type||details.title||"")}</div>;
 }
 
 function NapaView({records,canCreate,onCreate}:{records:RecordRow[];canCreate:boolean;onCreate:()=>void}){
