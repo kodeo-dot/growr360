@@ -1401,11 +1401,11 @@ function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => v
         {actualType!=="napa"&&<article><Grid2X2/><small>Superficie</small><strong>{area>0?`${area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"No informada"}</strong></article>}
       </div>
 
-      {(record.contractor||record.machinery_text)&&<section className="record-ot-section"><div className="record-ot-section-title"><Tractor/><div><h3>Ejecución</h3><p>Responsables y maquinaria</p></div></div><div className="record-ot-values">{record.contractor&&<DataTile label="Contratista / responsable" value={record.contractor}/>} {record.machinery_text&&<DataTile label="Maquinaria" value={record.machinery_text}/>}</div></section>}
+      {inputs.length>0&&<section className="record-ot-section record-ot-inputs-priority"><div className="record-ot-section-title"><Leaf/><div><h3>Insumos y dosis</h3><p>Productos utilizados en esta labor</p></div></div><div className="record-ot-input-list">{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <article key={input.index}><div className="record-ot-input-name"><small>INSUMO</small><strong>{input.name||`Insumo ${input.index+1}`}</strong></div><div className="record-ot-input-measure"><small>DOSIS</small><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} <span>{rateUnit}</span></strong></div><div className="record-ot-input-measure total"><small>TOTAL</small><strong>{perHa?input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2}):"—"} <span>{perHa?totalUnit:"Según base tratada"}</span></strong></div></article>})}</div></section>}
 
       {isMonitoring&&<section className="record-ot-section monitoring-ot-section"><div className="record-ot-section-title"><Activity/><div><h3>Estado del monitoreo</h3><p>Condición sanitaria y observaciones de campo</p></div></div><MonitoringHealthBlock details={details} entries={monitoring}/></section>}
 
-      {inputs.length>0&&<section className="record-ot-section"><div className="record-ot-section-title"><Leaf/><div><h3>Insumos y dosis</h3><p>Productos utilizados en esta labor</p></div></div><div className="record-ot-input-list">{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <article key={input.index}><div className="record-ot-input-name"><small>INSUMO</small><strong>{input.name||`Insumo ${input.index+1}`}</strong></div><div className="record-ot-input-measure"><small>DOSIS</small><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} <span>{rateUnit}</span></strong></div><div className="record-ot-input-measure total"><small>TOTAL</small><strong>{perHa?input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2}):"—"} <span>{perHa?totalUnit:"Según base tratada"}</span></strong></div></article>})}</div></section>}
+      {(record.contractor||record.machinery_text)&&<section className="record-ot-section record-ot-execution"><div className="record-ot-section-title"><Tractor/><div><h3>Ejecución</h3><p>Responsables y maquinaria</p></div></div><div className="record-ot-values">{record.contractor&&<DataTile label="Contratista / responsable" value={record.contractor}/>} {record.machinery_text&&<DataTile label="Maquinaria" value={record.machinery_text}/>}</div></section>}
 
       {technical.length>0&&<RecordDetailPanel title="Datos de la labor" eyebrow="DATOS TÉCNICOS" icon={SlidersHorizontal} entries={technical}/>} 
       {samples.length>0&&<RecordDetailPanel title="Resultados de muestras" eyebrow="MUESTRAS DE SUELO" icon={MapPin} entries={samples}/>} 
@@ -1510,12 +1510,29 @@ function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { r
   const [query, setQuery] = useState("");
   const [selected,setSelected]=useState<RecordRow|null>(null);
   const [typeFilter,setTypeFilter]=useState("all");
+  const [campaignFilter,setCampaignFilter]=useState("all");
+  const [fieldFilter,setFieldFilter]=useState("all");
+  const [plotFilter,setPlotFilter]=useState("all");
+  const [cropFilter,setCropFilter]=useState("all");
+  const [dateFrom,setDateFrom]=useState("");
+  const [dateTo,setDateTo]=useState("");
   const monitoring = mode === "monitoring";
   const baseRows=records.filter(row => monitoring ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row)));
   const recordTypes=Array.from(new Set(baseRows.map(row=>effectiveRecordType(row)))).sort((a,b)=>recordType(a).localeCompare(recordType(b),"es"));
+  const campaigns=Array.from(new Map(baseRows.map(row=>{const item=relation(row.campaigns);return item?.name?[String(row.campaign_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const fields=Array.from(new Map(baseRows.map(row=>{const item=relation(row.fields);return item?.name?[String(row.field_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const plots=Array.from(new Map(baseRows.filter(row=>fieldFilter==="all"||String(row.field_id||relation(row.fields)?.name)===fieldFilter).map(row=>{const item=relation(row.plots);return item?.name?[String(row.plot_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const crops=Array.from(new Set(baseRows.map(recordCrop).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"es"));
   const normalizedQuery=query.trim().toLowerCase();
   const visible = baseRows.filter(row => {
     if(!monitoring&&typeFilter!=="all"&&effectiveRecordType(row)!==typeFilter)return false;
+    if(campaignFilter!=="all"&&String(row.campaign_id||relation(row.campaigns)?.name)!==campaignFilter)return false;
+    if(fieldFilter!=="all"&&String(row.field_id||relation(row.fields)?.name)!==fieldFilter)return false;
+    if(plotFilter!=="all"&&String(row.plot_id||relation(row.plots)?.name)!==plotFilter)return false;
+    if(cropFilter!=="all"&&recordCrop(row)!==cropFilter)return false;
+    const rowDate=String(row.record_date||"").slice(0,10);
+    if(dateFrom&&rowDate&&rowDate<dateFrom)return false;
+    if(dateTo&&rowDate&&rowDate>dateTo)return false;
     if(!normalizedQuery)return true;
     const haystack=[recordType(effectiveRecordType(row)),relation(row.fields)?.name,relation(row.plots)?.name,relation(row.campaigns)?.name,recordCrop(row),JSON.stringify(recordData(row))].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(normalizedQuery);
@@ -1525,6 +1542,8 @@ function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { r
   const thisMonth=baseRows.filter(row=>String(row.record_date||"").slice(0,7)===monthKey).length;
   const fieldCount=new Set(baseRows.map(row=>row.field_id||relation(row.fields)?.name).filter(Boolean)).size;
   const plotCount=new Set(baseRows.map(row=>row.plot_id||relation(row.plots)?.name).filter(Boolean)).size;
+  const hasFilters=Boolean(query||typeFilter!=="all"||campaignFilter!=="all"||fieldFilter!=="all"||plotFilter!=="all"||cropFilter!=="all"||dateFrom||dateTo);
+  const clearFilters=()=>{setQuery("");setTypeFilter("all");setCampaignFilter("all");setFieldFilter("all");setPlotFilter("all");setCropFilter("all");setDateFrom("");setDateTo("")};
   return <div className="page-content records-ot-style">
     <PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Seguimiento del estado de los cultivos, plagas, malezas y enfermedades." : "Siembras, aplicaciones, cosechas, labores y análisis del grupo."}/>
     <div className="records-kpis">
@@ -1533,13 +1552,21 @@ function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { r
       <article><span>Campos</span><strong>{fieldCount}</strong></article>
       <article><span>{monitoring?"Lotes":"Tipos"}</span><strong>{monitoring?plotCount:recordTypes.length}</strong></article>
     </div>
-    <section className="content-card records-directory">
+    <section className="content-card records-directory records-directory-v25">
       <header>
-        <div className="records-directory-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar por campo, lote o cultivo" : "Buscar por registro, campo, lote o cultivo"}/></div>
-        {!monitoring&&<select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}><option value="all">Todos los tipos</option>{recordTypes.map(type=><option key={type} value={type}>{recordType(type)}</option>)}</select>}
+        <div className="records-directory-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar monitoreos" : "Buscar registros"}/></div>
         {canCreate&&<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>}
       </header>
-      <div className="records-directory-meta"><span>{visible.length} {monitoring?"monitoreo":"registro"}{visible.length===1?"":"s"}</span>{(query||(!monitoring&&typeFilter!=="all"))&&<button type="button" onClick={()=>{setQuery("");setTypeFilter("all")}}>Limpiar filtros</button>}</div>
+      <div className="records-filter-grid">
+        {!monitoring&&<label><span>Tipo</span><select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}><option value="all">Todos</option>{recordTypes.map(type=><option key={type} value={type}>{recordType(type)}</option>)}</select></label>}
+        <label><span>Campaña</span><select value={campaignFilter} onChange={event=>setCampaignFilter(event.target.value)}><option value="all">Todas</option>{campaigns.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
+        <label><span>Campo</span><select value={fieldFilter} onChange={event=>{setFieldFilter(event.target.value);setPlotFilter("all")}}><option value="all">Todos</option>{fields.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
+        <label><span>Lote</span><select value={plotFilter} onChange={event=>setPlotFilter(event.target.value)}><option value="all">Todos</option>{plots.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
+        <label><span>Cultivo</span><select value={cropFilter} onChange={event=>setCropFilter(event.target.value)}><option value="all">Todos</option>{crops.map(crop=><option key={crop} value={crop}>{crop}</option>)}</select></label>
+        <label><span>Desde</span><input type="date" value={dateFrom} onChange={event=>setDateFrom(event.target.value)}/></label>
+        <label><span>Hasta</span><input type="date" value={dateTo} onChange={event=>setDateTo(event.target.value)}/></label>
+      </div>
+      <div className="records-directory-meta"><span>{visible.length} {monitoring?"monitoreo":"registro"}{visible.length===1?"":"s"}</span>{hasFilters&&<button type="button" onClick={clearFilters}>Limpiar filtros</button>}</div>
       <div className="record-list records-ot-list">{visible.map(row => <button type="button" className="record-card" key={row.id} onClick={()=>setSelected(row)}>
         <i className={`record-accent record-accent-${effectiveRecordType(row)}`}/>
         <div className="record-type-icon">{monitoring ? <Eye/> : <RecordTypeIcon type={effectiveRecordType(row)}/>}</div>

@@ -1,0 +1,8 @@
+Growr360 v25
+- Registros y Monitoreos: filtros por campaña, campo, lote, cultivo y rango de fechas.
+- Registros además mantiene filtro por tipo.
+- Campo filtra las opciones disponibles de lote.
+- Botón Limpiar filtros restablece todo.
+- Detalle de Registro/Monitoreo más compacto.
+- Insumos y dosis movidos arriba de Ejecución por prioridad operativa.
+- Unidades siguen inline junto al valor en Dosis y Total.
