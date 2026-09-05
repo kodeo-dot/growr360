@@ -1,0 +1,6 @@
+Growr360 v34 — NDVI 3 zonas / cambio de fecha
+
+- Corrige la resolución usada por Sentinel Hub Statistical API.
+- El polígono se envía en CRS84 (grados), por lo que resx/resy=10 era ~10 grados/píxel y reducía lotes agrícolas normales a 1 píxel estadístico.
+- Ahora usa 0.00009 grados (~10 m) para aproximar la resolución nativa de Sentinel-2.
+- Al seleccionar otra fecha, la escena queda seleccionada inmediatamente aunque el análisis falle, evitando que la UI parezca trabada en la fecha anterior.

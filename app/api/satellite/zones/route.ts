@@ -77,8 +77,11 @@ export async function POST(request: Request) {
           timeRange: { from: `${payload.date}T00:00:00Z`, to: nextUtcDay(payload.date) },
           aggregationInterval: { of: "P1D" },
           evalscript: NDVI_STATS_EVALSCRIPT,
-          resx: 10,
-          resy: 10
+          // CRS84 uses degrees, not meters. 0.00009° is roughly 10 m at the equator.
+          // Using 10 here meant ~10 degrees per pixel, which collapsed normal farm lots
+          // to a single statistical pixel and caused validPixels=1 on every date.
+          resx: 0.00009,
+          resy: 0.00009
         },
         calculations: {
           ndvi: { statistics: { B0: { percentiles: { k: [33, 67] } } } }

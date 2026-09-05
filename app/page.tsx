@@ -1273,6 +1273,9 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     const target = mapPlots.find(plot => plot.id === satellitePlotId); const feature = target && geometry(target.geometry_json);
     if (!scene || !feature || !mapRef.current) return;
     const safeIndex = !satelliteAdvanced && !satelliteFreeIndices.includes(index) ? "NDVI" : index;
+    // Select the clicked scene immediately. Even if its analysis fails, the UI must
+    // reflect the date the user actually chose instead of appearing stuck on the previous one.
+    setSatelliteScene(scene);
     setSatelliteLoading(true); setSatelliteError("");
     try {
       const thresholds = safeIndex === "NDVI_3Z" ? await loadNdviZones(feature, scene.date) : null;
@@ -1283,7 +1286,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       const source = mapRef.current.getSource("sentinel-image") as maplibregl.ImageSource | undefined;
       source?.updateImage({ url, coordinates: [[bounds.west,bounds.north],[bounds.east,bounds.north],[bounds.east,bounds.south],[bounds.west,bounds.south]] });
       mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", satelliteOpacity);
-      setSatelliteScene(scene); setSatelliteIndex(safeIndex); fitPlots(mapRef.current, mapPlots.filter(plot => plot.id === target.id));
+      setSatelliteIndex(safeIndex); fitPlots(mapRef.current, mapPlots.filter(plot => plot.id === target.id));
     } catch (error) { setSatelliteError(error instanceof Error ? error.message : "No se pudo mostrar la imagen."); }
     setSatelliteLoading(false);
   }
