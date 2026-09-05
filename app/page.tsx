@@ -1512,9 +1512,46 @@ function RealFieldsView({ fields, plots, onOpenPlot, canCreate, onCreate }: { fi
 function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { records: RecordRow[]; canCreate:boolean; onCreate:()=>void; mode?:"records"|"monitoring" }) {
   const [query, setQuery] = useState("");
   const [selected,setSelected]=useState<RecordRow|null>(null);
-  const visible = records.filter(row => (mode === "monitoring" ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row))) && JSON.stringify(row).toLowerCase().includes(query.toLowerCase()));
+  const [typeFilter,setTypeFilter]=useState("all");
   const monitoring = mode === "monitoring";
-  return <div className="page-content"><PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Seguimiento del estado de los cultivos, plagas, malezas y enfermedades." : "Siembras, aplicaciones, cosechas, labores y análisis del grupo."} action={canCreate?<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>:undefined}/><div className="records-toolbar"><div className="inner-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar monitoreo por campo o lote…" : "Buscar por campo, lote o tipo…"}/></div><button className="soft-button"><Filter/>Filtros</button></div><div className="record-list">{visible.map(row => <button type="button" className="record-card interactive-card" key={row.id} onClick={()=>setSelected(row)}><div className="record-type-icon">{monitoring ? <Eye/> : <RecordTypeIcon type={effectiveRecordType(row)}/>}</div><div className="record-main"><span>{recordType(effectiveRecordType(row))}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><div className="record-context"><small>{formatDate(row.record_date)}</small><i/><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small>{row.worked_area!=null&&<><i/><small>{number(row.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</small></>}</div></div><RecordListSummary row={row}/><ChevronRight className="record-open-icon"/></button>)}{!visible.length && <EmptyLine text={monitoring ? "No hay monitoreos para mostrar." : "No hay registros para mostrar."}/>}</div>{selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>}</div>;
+  const baseRows=records.filter(row => monitoring ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row)));
+  const recordTypes=Array.from(new Set(baseRows.map(row=>effectiveRecordType(row)))).sort((a,b)=>recordType(a).localeCompare(recordType(b),"es"));
+  const normalizedQuery=query.trim().toLowerCase();
+  const visible = baseRows.filter(row => {
+    if(!monitoring&&typeFilter!=="all"&&effectiveRecordType(row)!==typeFilter)return false;
+    if(!normalizedQuery)return true;
+    const haystack=[recordType(effectiveRecordType(row)),relation(row.fields)?.name,relation(row.plots)?.name,relation(row.campaigns)?.name,recordCrop(row),JSON.stringify(recordData(row))].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+  const now=new Date();
+  const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const thisMonth=baseRows.filter(row=>String(row.record_date||"").slice(0,7)===monthKey).length;
+  const fieldCount=new Set(baseRows.map(row=>row.field_id||relation(row.fields)?.name).filter(Boolean)).size;
+  const plotCount=new Set(baseRows.map(row=>row.plot_id||relation(row.plots)?.name).filter(Boolean)).size;
+  return <div className="page-content records-ot-style">
+    <PageHead title={monitoring ? "Monitoreos" : "Registros"} text={monitoring ? "Seguimiento del estado de los cultivos, plagas, malezas y enfermedades." : "Siembras, aplicaciones, cosechas, labores y análisis del grupo."}/>
+    <div className="records-kpis">
+      <article><span>{monitoring?"Monitoreos":"Registros"}</span><strong>{baseRows.length}</strong></article>
+      <article><span>Este mes</span><strong>{thisMonth}</strong></article>
+      <article><span>Campos</span><strong>{fieldCount}</strong></article>
+      <article><span>{monitoring?"Lotes":"Tipos"}</span><strong>{monitoring?plotCount:recordTypes.length}</strong></article>
+    </div>
+    <section className="content-card records-directory">
+      <header>
+        <div className="records-directory-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={monitoring ? "Buscar por campo, lote o cultivo" : "Buscar por registro, campo, lote o cultivo"}/></div>
+        {!monitoring&&<select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)}><option value="all">Todos los tipos</option>{recordTypes.map(type=><option key={type} value={type}>{recordType(type)}</option>)}</select>}
+        {canCreate&&<button className="primary-action" onClick={onCreate}><Plus/>{monitoring ? "Nuevo monitoreo" : "Nuevo registro"}</button>}
+      </header>
+      <div className="records-directory-meta"><span>{visible.length} {monitoring?"monitoreo":"registro"}{visible.length===1?"":"s"}</span>{(query||(!monitoring&&typeFilter!=="all"))&&<button type="button" onClick={()=>{setQuery("");setTypeFilter("all")}}>Limpiar filtros</button>}</div>
+      <div className="record-list records-ot-list">{visible.map(row => <button type="button" className="record-card" key={row.id} onClick={()=>setSelected(row)}>
+        <i className={`record-accent record-accent-${effectiveRecordType(row)}`}/>
+        <div className="record-type-icon">{monitoring ? <Eye/> : <RecordTypeIcon type={effectiveRecordType(row)}/>}</div>
+        <div className="record-main"><span>{recordType(effectiveRecordType(row))}{row.record_date?` · ${formatDate(row.record_date)}`:""}</span><h3>{relation(row.fields)?.name ?? "Campo"} · {relation(row.plots)?.name ?? "Sin lote"}</h3><div className="record-context"><small>{relation(row.campaigns)?.name ?? "Sin campaña"}</small>{recordCrop(row)&&<><i/><small>{recordCrop(row)}</small></>}{row.worked_area!=null&&<><i/><small>{number(row.worked_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha</small></>}</div></div>
+        <RecordListSummary row={row}/><ChevronRight className="record-open-icon"/>
+      </button>)}{!visible.length && <EmptyLine text={monitoring ? "No hay monitoreos con estos filtros." : "No hay registros con estos filtros."}/>}</div>
+    </section>
+    {selected&&<RecordDetail record={selected} onClose={()=>setSelected(null)}/>} 
+  </div>;
 }
 
 function RecordListSummary({row}:{row:RecordRow}){

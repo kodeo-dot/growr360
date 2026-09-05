@@ -929,3 +929,37 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
 .record-detail-v4 .input-dose .input-measure strong,.record-detail-v4 .input-dose .input-measure span{color:var(--green)!important}
 .record-detail-v4 .input-total .input-measure strong,.record-detail-v4 .input-total .input-measure span{color:var(--ink)!important}
 @media(max-width:480px){.record-detail-v4 .input-measure strong,.record-detail-v4 .input-measure span{font-size:17px!important}}
+
+/* Growr360 v23 · Registros y Monitoreos alineados visualmente con Órdenes de trabajo */
+.records-ot-style{display:grid;gap:18px}
+.records-ot-style .page-head{margin-bottom:0}
+.records-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;max-width:1480px;width:100%;margin:0 auto}
+.records-kpis article{padding:18px 20px;border:1px solid #dce6df;border-radius:16px;background:var(--card);display:flex;justify-content:space-between;align-items:flex-end;min-width:0;box-shadow:0 9px 28px rgba(20,61,44,.035)}
+.records-kpis span{color:var(--muted);font-size:12px;font-weight:800}
+.records-kpis strong{font-size:30px;line-height:1;color:var(--deep);letter-spacing:-.04em}
+.records-directory{max-width:1480px;width:100%;margin:0 auto;padding:18px!important;border:1px solid #dfe8e2!important;border-radius:18px!important;box-shadow:0 10px 34px rgba(18,61,43,.045)!important;background:var(--card)!important;overflow:visible!important}
+.records-directory>header{display:grid;grid-template-columns:minmax(280px,1fr) 170px auto;gap:10px;align-items:center;padding:0 0 14px;border-bottom:1px solid var(--line)}
+.records-directory>header:not(:has(select)){grid-template-columns:minmax(280px,1fr) auto}
+.records-directory-search{height:44px;border:1px solid #dbe5de;border-radius:12px;display:flex;align-items:center;padding:0 13px;gap:9px;background:color-mix(in srgb,var(--card) 82%,var(--paper))}
+.records-directory-search svg{width:18px;color:var(--muted);flex:0 0 auto}
+.records-directory-search input{width:100%;min-width:0;border:0!important;box-shadow:none!important;outline:0;background:transparent;color:var(--ink);padding:0}
+.records-directory select{height:44px;border:1px solid #d5e1d9;border-radius:10px;background:var(--card);padding:0 11px;color:var(--ink);min-width:0}
+.records-directory-meta{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px;font-weight:750;border-bottom:1px solid var(--line)}
+.records-directory-meta button{border:0;background:transparent;color:var(--green);font-size:11px;font-weight:850;padding:8px 0}
+.records-ot-list{display:block!important;margin:0!important;border:0!important;gap:0!important}
+.records-ot-list>.record-card{position:relative;width:100%;min-height:84px;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;background:var(--card)!important;box-shadow:none!important;display:grid!important;grid-template-columns:5px 42px minmax(0,1fr) minmax(210px,.72fr) 20px!important;align-items:center;gap:14px;padding:12px 9px!important;text-align:left;color:var(--ink);transform:none!important}
+.records-ot-list>.record-card:hover{background:color-mix(in srgb,var(--mint) 35%,var(--card))!important;transform:none!important}
+.records-ot-list .record-accent{width:5px;height:48px;border-radius:9px;background:#69b487;display:block}
+.records-ot-list .record-accent-harvest{background:#d8a52d}.records-ot-list .record-accent-sowing{background:#65a94b}.records-ot-list .record-accent-spraying{background:#3c94a5}.records-ot-list .record-accent-fertilization{background:#8b70c9}.records-ot-list .record-accent-monitoring{background:#4f86c6}.records-ot-list .record-accent-soil_analysis{background:#986c48}
+.records-ot-list .record-type-icon{width:40px;height:40px;border-radius:11px;background:var(--mint);color:var(--green);box-shadow:none;display:grid;place-items:center}
+.records-ot-list .record-type-icon svg{width:18px}
+.records-ot-list .record-main span{font-size:10px;font-weight:900;color:var(--green);text-transform:uppercase;letter-spacing:.05em}
+.records-ot-list .record-main h3{font-size:15px;margin:4px 0;color:var(--ink);white-space:normal}
+.records-ot-list .record-context{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--muted)}
+.records-ot-list .record-context small{font-size:11px}
+.records-ot-list .record-list-summary{min-width:0;border-left:1px solid var(--line);padding-left:16px}
+.records-ot-list .record-open-icon{width:18px;color:var(--muted)}
+:root[data-theme="dark"] .records-kpis article,:root[data-theme="dark"] .records-directory,:root[data-theme="dark"] .records-ot-list>.record-card{background:var(--card)!important;border-color:var(--line)!important}
+:root[data-theme="dark"] .records-kpis strong{color:var(--ink)}
+@media(max-width:900px){.records-kpis{grid-template-columns:1fr 1fr}.records-directory>header,.records-directory>header:not(:has(select)){grid-template-columns:1fr}.records-ot-list>.record-card{grid-template-columns:5px 38px minmax(0,1fr) 20px!important}.records-ot-list .record-list-summary{grid-column:3/5;border-left:0;border-top:1px solid var(--line);padding:8px 0 0}.records-ot-list .record-open-icon{grid-column:4;grid-row:1}.records-directory .primary-action{justify-content:center}}
+@media(max-width:520px){.records-kpis{gap:8px}.records-kpis article{padding:14px 15px}.records-kpis strong{font-size:25px}.records-directory{padding:13px!important}.records-ot-list>.record-card{gap:9px;padding:11px 3px!important}.records-ot-list .record-type-icon{width:35px;height:35px}.records-ot-list .record-main h3{font-size:13px}}
