@@ -1321,3 +1321,12 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
   .sat-history-head-v29 small{max-width:150px!important}
   .satellite-panel-v28.minimized{left:10px!important;right:auto!important;bottom:66px!important;width:min(285px,calc(100% - 82px))!important}
 }
+
+/* v35 · NDVI 3/5 zonas con superficie */
+.sat-zones-v35{border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--paper) 96%,transparent);padding:7px 8px;display:grid;gap:6px}
+.sat-zones-meta-v35{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}.sat-zones-meta-v35 strong{font-size:11px;color:var(--ink);font-weight:850}.sat-zones-meta-v35 small{font-size:9px;color:var(--muted);white-space:nowrap}
+.sat-zone-grid-v35{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.sat-zones-v35.zones-5 .sat-zone-grid-v35{grid-template-columns:repeat(5,minmax(0,1fr))}
+.sat-zone-grid-v35>span{min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr);grid-template-areas:"dot copy" "dot area";column-gap:5px;align-items:center;padding:5px 6px;border:1px solid color-mix(in srgb,var(--line) 88%,transparent);border-radius:7px;background:var(--paper)}
+.sat-zone-grid-v35 i{grid-area:dot;width:7px;height:24px;border-radius:5px}.sat-zone-grid-v35 em{grid-area:copy;min-width:0;font-style:normal;display:flex;align-items:baseline;gap:4px}.sat-zone-grid-v35 em b{font-size:9px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sat-zone-grid-v35 em small{font-size:8px;color:var(--muted);white-space:nowrap}.sat-zone-grid-v35>span>strong{grid-area:area;font-size:10.5px;line-height:1.05;color:var(--ink);font-weight:900;white-space:nowrap}
+@media(max-width:900px){.sat-zones-v35.zones-5 .sat-zone-grid-v35{grid-template-columns:repeat(3,minmax(0,1fr))}.sat-zones-meta-v35 small{white-space:normal;text-align:right}}
+@media(max-width:600px){.sat-zone-grid-v35,.sat-zones-v35.zones-5 .sat-zone-grid-v35{grid-template-columns:repeat(2,minmax(0,1fr))}.sat-zones-meta-v35{align-items:flex-start}.sat-zones-meta-v35 small{font-size:8.5px}}

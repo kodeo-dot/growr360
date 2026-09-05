@@ -1,0 +1,6 @@
+Growr360 v35
+- Agrega NDVI 5 zonas (percentiles 20/40/60/80) para planes Pro/Business.
+- Mantiene NDVI 3 zonas.
+- Cada zona muestra su superficie estimada en hectáreas.
+- La superficie usa la proporción real de píxeles clasificados y la cobertura despejada de la escena.
+- El panel informa también hectáreas analizadas y % despejado.

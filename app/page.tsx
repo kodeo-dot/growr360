@@ -870,10 +870,10 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [satelliteOpacity, setSatelliteOpacity] = useState(.82);
   const [satellitePlotId, setSatellitePlotId] = useState("");
   const [satellitePreviews, setSatellitePreviews] = useState<Record<string, string>>({});
-  const [satelliteZoneStats, setSatelliteZoneStats] = useState<{ low:number; high:number; min?:number; max?:number } | null>(null);
+  const [satelliteZoneStats, setSatelliteZoneStats] = useState<{ zoneCount:number; cuts:number[]; min?:number; max?:number; plotAreaHa?:number; clearAreaHa?:number; clearCoverage?:number; zones:Array<{index:number;label:string;min?:number|null;max?:number|null;areaHa:number;share:number;color:string}> } | null>(null);
   const satelliteAdvanced = plan !== "free";
   const satelliteFreeIndices = ["RGB", "NDVI"];
-  const satelliteProIndices = ["RGB", "NDVI", "NDVI_CONTINUOUS", "NDVI_3Z", "NDVI_CONTRASTED", "FALSE_COLOR", "NDRE", "SAVI", "EVI"];
+  const satelliteProIndices = ["RGB", "NDVI", "NDVI_CONTINUOUS", "NDVI_3Z", "NDVI_5Z", "NDVI_CONTRASTED", "FALSE_COLOR", "NDRE", "SAVI", "EVI"];
   const satelliteIndices = satelliteAdvanced ? satelliteProIndices : satelliteFreeIndices;
   const [detailRecord, setDetailRecord] = useState<RecordRow | null>(null);
   const [campaignFilterId, setCampaignFilterId] = useState("");
@@ -1254,20 +1254,24 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   }
   async function loadSatellitePreviews(target: MapPlot, scenes: SatelliteScene[], index: string) {
     const feature = geometry(target.geometry_json); if (!feature) return;
-    const safeIndex = !satelliteAdvanced && !satelliteFreeIndices.includes(index) ? "NDVI" : (index === "NDVI_3Z" ? "NDVI_CONTINUOUS" : index);
+    const safeIndex = !satelliteAdvanced && !satelliteFreeIndices.includes(index) ? "NDVI" : (["NDVI_3Z","NDVI_5Z"].includes(index) ? "NDVI_CONTINUOUS" : index);
     const entries = await Promise.all(scenes.map(async scene => {
       try { const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index: safeIndex, thumbnail: true }) }); if (!response.ok) return [scene.id, ""] as const; return [scene.id, URL.createObjectURL(await response.blob())] as const; } catch { return [scene.id, ""] as const; }
     }));
     setSatellitePreviews(Object.fromEntries(entries));
   }
-  async function loadNdviZones(feature: GeoFeature, date: string) {
+  async function loadNdviZones(feature: GeoFeature, date: string, zoneCount: 3 | 5) {
     if (!satelliteAdvanced) return null;
-    const response = await fetch("/api/satellite/zones", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date }) });
+    const response = await fetch("/api/satellite/zones", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date, zoneCount }) });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "No se pudieron calcular las zonas NDVI.");
-    const zones = { low:Number(payload.low), high:Number(payload.high), min:Number(payload.min), max:Number(payload.max) };
+    const zones = {
+      zoneCount:Number(payload.zoneCount || zoneCount), cuts:(payload.cuts ?? []).map(Number), min:Number(payload.min), max:Number(payload.max),
+      plotAreaHa:Number(payload.plotAreaHa), clearAreaHa:Number(payload.clearAreaHa), clearCoverage:Number(payload.clearCoverage),
+      zones:(payload.zones ?? []).map((zone:any)=>({index:Number(zone.index),label:String(zone.label),min:zone.min==null?null:Number(zone.min),max:zone.max==null?null:Number(zone.max),areaHa:Number(zone.areaHa),share:Number(zone.share),color:String(zone.color||"")}))
+    };
     setSatelliteZoneStats(zones);
-    return zones;
+    return { cuts: zones.cuts, low: zones.cuts[0], high: zones.cuts[zones.cuts.length - 1] };
   }
   async function showSatellite(scene = satelliteScene, index = satelliteIndex) {
     const target = mapPlots.find(plot => plot.id === satellitePlotId); const feature = target && geometry(target.geometry_json);
@@ -1278,8 +1282,9 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     setSatelliteScene(scene);
     setSatelliteLoading(true); setSatelliteError("");
     try {
-      const thresholds = safeIndex === "NDVI_3Z" ? await loadNdviZones(feature, scene.date) : null;
-      if (safeIndex !== "NDVI_3Z") setSatelliteZoneStats(null);
+      const zoneCount = safeIndex === "NDVI_5Z" ? 5 : safeIndex === "NDVI_3Z" ? 3 : null;
+      const thresholds = zoneCount ? await loadNdviZones(feature, scene.date, zoneCount) : null;
+      if (!zoneCount) setSatelliteZoneStats(null);
       const response = await fetch("/api/satellite/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ geometry: feature, date: scene.date, index: safeIndex, thresholds }) });
       if (!response.ok) { const payload = await response.json(); throw new Error(payload.error || "No se pudo procesar la imagen."); }
       const blob = await response.blob(); const url = URL.createObjectURL(blob); const bounds = featureBounds(feature);
@@ -1353,7 +1358,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
         <div className="sat-opacity sat-opacity-v29"><span><span>Opacidad</span><b>{Math.round(satelliteOpacity * 100)}%</b></span><input type="range" min=".1" max="1" step=".05" value={satelliteOpacity} onChange={e => { const value = Number(e.target.value); setSatelliteOpacity(value); if (mapRef.current?.getLayer("sentinel-layer")) mapRef.current.setPaintProperty("sentinel-layer", "raster-opacity", value); }}/></div></div>
         <div className="sat-selector sat-selector-v29">{satelliteIndices.map(index => <button key={index} className={satelliteIndex === index ? "active" : ""} onClick={() => { setSatelliteIndex(index); const target = mapPlots.find(plot => plot.id === satellitePlotId); if (target) void loadSatellitePreviews(target, satelliteScenes.slice(0, satelliteAdvanced ? 10 : 1), index); if (satelliteScene) void showSatellite(satelliteScene, index); }}>{satelliteIndexName(index)}</button>)}</div>
         {!satelliteAdvanced && <div className="sat-plan-note-v30"><span>FREE</span><p>Incluye la última imagen con <b>RGB</b> y <b>NDVI</b>. Historial, zonas e índices avanzados están disponibles desde Pro.</p></div>}
-        {satelliteIndex === "NDVI_3Z" && satelliteZoneStats && <div className="sat-zones-v30"><span><i className="low"/>Baja <b>≤ {satelliteZoneStats.low.toFixed(2)}</b></span><span><i className="mid"/>Media <b>{satelliteZoneStats.low.toFixed(2)}–{satelliteZoneStats.high.toFixed(2)}</b></span><span><i className="high"/>Alta <b>&gt; {satelliteZoneStats.high.toFixed(2)}</b></span></div>}
+        {["NDVI_3Z","NDVI_5Z"].includes(satelliteIndex) && satelliteZoneStats && <div className={`sat-zones-v35 zones-${satelliteZoneStats.zoneCount}`}><div className="sat-zones-meta-v35"><strong>{satelliteZoneStats.zoneCount} zonas NDVI</strong><small>{Number.isFinite(satelliteZoneStats.clearAreaHa)?`${satelliteZoneStats.clearAreaHa!.toLocaleString("es-AR",{maximumFractionDigits:1})} ha analizadas`:"Superficie analizada"}{Number.isFinite(satelliteZoneStats.clearCoverage)?` · ${Math.round(satelliteZoneStats.clearCoverage!)}% despejado`:""}</small></div><div className="sat-zone-grid-v35">{satelliteZoneStats.zones.map(zone=><span key={zone.index}><i style={{background:zone.color}}/><em><b>{zone.label}</b><small>{zone.min==null?`≤ ${Number(zone.max).toFixed(2)}`:zone.max==null?`> ${Number(zone.min).toFixed(2)}`:`${Number(zone.min).toFixed(2)}–${Number(zone.max).toFixed(2)}`}</small></em><strong>{zone.areaHa.toLocaleString("es-AR",{maximumFractionDigits:1})} ha</strong></span>)}</div></div>}
         {satelliteLoading && <div className="sat-loading sat-loading-v29"><LoaderCircle className="spin"/>Procesando imagen…</div>}{satelliteError && <p className="sat-error">{satelliteError}</p>}
         {!!satelliteScenes.length && <div className="history sat-history-v29"><div className="sat-history-head sat-history-head-v29"><div><strong>{satelliteAdvanced?"Historial":"Última imagen"}</strong><small>{satelliteAdvanced?`${satelliteScenes.length} imágenes disponibles`:"El historial completo se habilita desde Pro"}</small></div><span>{satelliteIndexName(satelliteIndex)}</span></div><div className="sat-filmstrip-v29">{satelliteScenes.slice(0, satelliteAdvanced ? 12 : 1).map(scene => <button key={scene.id} className={satelliteScene?.id === scene.id ? "active" : ""} onClick={() => void showSatellite(scene)}>{satellitePreviews[scene.id] ? <img className="sentinel-preview-image" src={satellitePreviews[scene.id]} alt={`Vista ${scene.date}`}/> : <div className="sentinel-preview"><LoaderCircle className="spin"/></div>}<span className="sat-date-copy"><b>{formatDate(scene.date)}</b><small>{Math.round(scene.cloud)}% nubes</small></span></button>)}</div></div>}
       </div>}
@@ -2383,7 +2388,7 @@ function featureBounds(feature: GeoFeature) {
   const points = feature.geometry.coordinates[0] ?? [];
   return { west: Math.min(...points.map(p => p[0])), east: Math.max(...points.map(p => p[0])), south: Math.min(...points.map(p => p[1])), north: Math.max(...points.map(p => p[1])) };
 }
-function satelliteIndexName(value: string) { return ({ RGB: "RGB natural", NDVI: "NDVI", NDVI_CONTINUOUS: "NDVI continuo", NDVI_3Z: "NDVI 3 zonas", NDVI_CONTRASTED: "NDVI contrastado", FALSE_COLOR: "Falso color", NDRE: "NDRE", SAVI: "SAVI", EVI: "EVI" } as Record<string, string>)[value] ?? value; }
+function satelliteIndexName(value: string) { return ({ RGB: "RGB natural", NDVI: "NDVI", NDVI_CONTINUOUS: "NDVI continuo", NDVI_3Z: "NDVI 3 zonas", NDVI_5Z: "NDVI 5 zonas", NDVI_CONTRASTED: "NDVI contrastado", FALSE_COLOR: "Falso color", NDRE: "NDRE", SAVI: "SAVI", EVI: "EVI" } as Record<string, string>)[value] ?? value; }
 function fitPlots(map: MapLibreMap, plots: MapPlot[]) {
   const coordinates = plots.flatMap(plot => plot.feature.geometry.coordinates[0] ?? []);
   if (!coordinates.length) return;

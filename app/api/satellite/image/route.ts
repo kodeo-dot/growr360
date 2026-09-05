@@ -2,7 +2,7 @@ import { planetInsightsToken, imageDimensions, satelliteEvalscript, unwrapGeomet
 
 export const runtime = "nodejs";
 
-type Thresholds = { low?: number; high?: number } | null;
+type Thresholds = { low?: number; high?: number; cuts?: number[] } | null;
 
 function advancedEvalscript(index: string, thresholds?: Thresholds) {
   if (index === "SAVI") return `//VERSION=3
@@ -14,6 +14,13 @@ function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return
   if (index === "NDVI_CONTINUOUS") return `//VERSION=3
 function setup(){return {input:["B04","B08","SCL","dataMask"],output:{bands:4}};}
 function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return [0,0,0,0];let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;let c=colorBlend(v,[-0.2,0,0.2,0.4,0.6,0.8,1],[[0.50,0.28,0.13],[0.78,0.58,0.28],[0.90,0.80,0.31],[0.64,0.75,0.20],[0.31,0.62,0.15],[0.08,0.42,0.12],[0.01,0.23,0.08]]);return [...c,1];}`;
+
+  if (index === "NDVI_5Z") {
+    const cuts = Array.isArray(thresholds?.cuts) && thresholds!.cuts!.length >= 4 ? thresholds!.cuts!.slice(0,4).map(Number) : [0.2,0.4,0.6,0.8];
+    return `//VERSION=3
+function setup(){return {input:["B04","B08","SCL","dataMask"],output:{bands:4}};}
+function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return [0,0,0,0];let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;if(v<=${cuts[0]})return [0.78,0.35,0.10,1];if(v<=${cuts[1]})return [0.85,0.65,0.18,1];if(v<=${cuts[2]})return [0.72,0.79,0.24,1];if(v<=${cuts[3]})return [0.34,0.66,0.27,1];return [0.09,0.44,0.23,1];}`;
+  }
   if (index === "NDVI_3Z") {
     const low = Number.isFinite(Number(thresholds?.low)) ? Number(thresholds?.low) : 0.33;
     const high = Number.isFinite(Number(thresholds?.high)) ? Number(thresholds?.high) : 0.66;
