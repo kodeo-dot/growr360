@@ -1,0 +1,7 @@
+Growr360 v19
+
+- El visor de fotos se renderiza en document.body mediante portal, por lo que ya no queda desplazado por el sidebar o por el contenedor del detalle.
+- Imagen centrada en toda la ventana, flechas siempre visibles y pie contenido.
+- Los insumos del detalle ahora se muestran en tarjetas diferenciadas, con Producto y Dosis próximos entre sí.
+- Se agregó color verde sutil a encabezados, chips, iconos, observaciones, monitoreo y adjuntos para mejorar jerarquía sin perder el estilo minimalista.
+- No requiere SQL nuevo.
