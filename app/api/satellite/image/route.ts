@@ -24,8 +24,9 @@ function smooth(a,b,x){let t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2
 function evaluatePixel(s){
   if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return [0,0,0,0];
   let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;
-  let c1=[0.82,0.32,0.07],c2=[0.89,0.64,0.14],c3=[0.73,0.82,0.19],c4=[0.30,0.69,0.23],c5=[0.05,0.46,0.20];
-  let softness=0.022;let c;
+  let c1=[0.78,0.35,0.10],c2=[0.85,0.65,0.18],c3=[0.72,0.79,0.24],c4=[0.34,0.66,0.27],c5=[0.09,0.44,0.23];
+  // Mismos colores del NDVI 5 zonas; sólo una transición mínima en cada corte.
+  let softness=0.006;let c;
   if(v<${cuts[0]}-softness)c=c1;
   else if(v<${cuts[0]}+softness)c=mix3(c1,c2,smooth(${cuts[0]}-softness,${cuts[0]}+softness,v));
   else if(v<${cuts[1]}-softness)c=c2;

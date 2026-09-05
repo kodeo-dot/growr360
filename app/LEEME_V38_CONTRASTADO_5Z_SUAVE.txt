@@ -1,0 +1,6 @@
+Growr360 v38 — NDVI contrastado
+
+- El contrastado usa exactamente la misma paleta y los mismos cortes adaptativos del NDVI 5 zonas.
+- La única diferencia es un degradado extremadamente leve alrededor de cada límite (±0.006 NDVI).
+- Fuera de esa franja mínima, los colores son planos como en 5 zonas.
+- Se conserva la lógica de superficie/cobertura y el resto de cambios de v37.
