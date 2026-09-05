@@ -687,3 +687,22 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
 .map-label-order-actions{display:flex;gap:3px}.map-label-order-actions button{width:28px!important;height:28px!important;border:1px solid var(--line,#e1e8e3)!important;border-radius:8px!important;background:var(--card,#fff)!important;color:var(--ink,#17231d)!important;padding:0!important;display:grid!important;place-items:center!important}.map-label-order-actions button:disabled{opacity:.3}.map-label-order-actions svg{width:13px}
 .map-label-options-title{padding:11px 16px 0}.map-label-panel .map-label-options{padding-top:6px}
 @media(max-width:760px){.map-label-order-row{grid-template-columns:28px minmax(0,1fr) auto}.map-label-order-title small{display:none}}
+
+/* Growr360 v16 · etiquetas: activar + ordenar en una sola lista */
+.map-label-unified{padding:10px 8px 8px}
+.map-label-unified-row{display:grid;grid-template-columns:28px 34px minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0;padding:9px 7px;margin-bottom:4px;border:1px solid transparent;border-radius:12px;transition:opacity .12s ease,border-color .12s ease,background .12s ease}
+.map-label-unified-row.active{background:var(--paper,#f4f7f5);cursor:grab}
+.map-label-unified-row.active:active{cursor:grabbing}
+.map-label-unified-row.inactive{background:transparent;border-color:var(--line,#e1e8e3);opacity:.72}
+.map-label-unified-row.dragging{opacity:.46;border-color:var(--green,#177a4b);background:#edf8f1}
+.map-label-unified .map-label-grip.disabled{opacity:.22;cursor:default}
+.map-label-toggle{width:32px;height:20px;position:relative;display:block;cursor:pointer}
+.map-label-toggle input{position:absolute;opacity:0;pointer-events:none}
+.map-label-toggle span{position:absolute;inset:0;border-radius:999px;background:#d7ded9;transition:background .16s ease}
+.map-label-toggle span:after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:transform .16s ease}
+.map-label-toggle input:checked+span{background:var(--green,#177a4b)}
+.map-label-toggle input:checked+span:after{transform:translateX(12px)}
+.map-label-toggle input:focus-visible+span{outline:2px solid var(--green,#177a4b);outline-offset:2px}
+.map-label-toggle input:disabled+span{opacity:.55}
+.map-label-unified-row.inactive .map-label-order-actions{opacity:.28}
+@media(max-width:760px){.map-label-unified-row{grid-template-columns:26px 34px minmax(0,1fr) auto;gap:7px;padding:9px 5px}.map-label-unified .map-label-order-title small{display:none}}
