@@ -1,0 +1,8 @@
+Growr360 v18
+
+Cambios principales:
+- Corregido el error de compilación de Next.js al importar KML/KMZ: el helper numérico ahora acepta valores unknown de propiedades GeoJSON/KML sin romper TypeScript.
+- Producción y rendimiento se muestran sin decimales en leyendas de lotes, resumen del lote, listas de cosecha, detalle y gráficos/reportes.
+- La carga de Producción total en cosecha usa valores enteros.
+- Los puntos medios del trazado de un lote ya no son inamovibles: al mantener presionado y arrastrar un punto medio, se convierte en un nuevo vértice y se mueve en el mismo gesto.
+- Se conserva todo lo incluido en v17.

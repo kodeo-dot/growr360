@@ -197,7 +197,7 @@ function plotsKml(plots:MapPlot[]){
 function escapeXml(value:string){return value.replace(/[<>&"']/g,char=>({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&apos;"}[char]??char));}
 function validMapCoordinate(point:number[]){return point.length>=2&&Number.isFinite(point[0])&&Number.isFinite(point[1])&&Math.abs(point[0])<=180&&Math.abs(point[1])<=90;}
 
-function number(value: number | string | null | undefined) {
+function number(value: unknown) {
   const parsed = Number(String(value ?? 0).replace(",", "."));
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -1087,19 +1087,22 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
       if (handles.length) return;
       setPoints(previous => [...previous, [event.lngLat.lng, event.lngLat.lat]]);
     };
-    const midpointClick = (event: maplibregl.MapLayerMouseEvent) => {
+    const midpointDown = (event: maplibregl.MapLayerMouseEvent) => {
       if (!drawing) return;
       event.preventDefault();
       event.originalEvent.stopPropagation();
-      suppressMapClickRef.current = true;
       const insertAfter = Number(event.features?.[0]?.properties?.insertAfter);
       if (!Number.isInteger(insertAfter)) return;
+      const newIndex = insertAfter + 1;
+      suppressMapClickRef.current = true;
       setPoints(previous => {
         const next = [...previous];
-        next.splice(insertAfter + 1, 0, [event.lngLat.lng, event.lngLat.lat]);
+        next.splice(newIndex, 0, [event.lngLat.lng, event.lngLat.lat]);
         return next;
       });
-      window.setTimeout(() => { suppressMapClickRef.current = false; }, 0);
+      draggedVertexRef.current = newIndex;
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
     };
     const vertexDown = (event: maplibregl.MapLayerMouseEvent) => {
       if (!drawing) return;
@@ -1128,7 +1131,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     const handleLeave = () => { if (draggedVertexRef.current === null) map.getCanvas().style.cursor = drawing ? "crosshair" : ""; };
     if (drawing) map.dragPan.disable();
     map.on("mouseup", placePoint);
-    map.on("click", "draw-midpoints", midpointClick);
+    map.on("mousedown", "draw-midpoints", midpointDown);
     map.on("mousedown", "draw-points", vertexDown);
     map.on("mousemove", dragVertex);
     map.on("mouseup", endVertexDrag);
@@ -1139,7 +1142,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     map.getCanvas().style.cursor = drawing ? "crosshair" : "";
     return () => {
       map.off("mouseup", placePoint);
-      map.off("click", "draw-midpoints", midpointClick);
+      map.off("mousedown", "draw-midpoints", midpointDown);
       map.off("mousedown", "draw-points", vertexDown);
       map.off("mousemove", dragVertex);
       map.off("mouseup", endVertexDrag);
@@ -1680,7 +1683,7 @@ function buildChartRows(rows:RecordRow[],dimension:string,metric:string){const g
 function metricSuffix(metric:string){if(["worked_area","planted_area","harvested_area"].includes(metric))return" ha";if(metric==="yield")return" kg/ha";if(metric==="water_table")return" cm";return"";}
 function ReportChart({type,rows,metric,selected,onSelect}:{type:"bar"|"line"|"pie";rows:[string,number][];metric:string;selected:string;onSelect:(label:string)=>void}){
   if(!rows.length)return <EmptyLine text="No hay datos para graficar con estos filtros."/>;
-  const values=rows.map(([,value])=>value);const domainMin=Math.min(0,...values);const domainMax=Math.max(0,...values);const range=Math.max(1,domainMax-domainMin);const zeroPercent=(0-domainMin)/range*100;const suffix=metricSuffix(metric);const format=(value:number)=>`${value.toLocaleString("es-AR",{maximumFractionDigits:2})}${suffix}`;
+  const values=rows.map(([,value])=>value);const domainMin=Math.min(0,...values);const domainMax=Math.max(0,...values);const range=Math.max(1,domainMax-domainMin);const zeroPercent=(0-domainMin)/range*100;const suffix=metricSuffix(metric);const metricDigits=["production","yield"].includes(metric)?0:2;const format=(value:number)=>`${value.toLocaleString("es-AR",{maximumFractionDigits:metricDigits})}${suffix}`;
   if(type==="pie"){const positive=rows.map(row=>[row[0],Math.max(0,row[1])] as [string,number]);const total=sum(positive.map(row=>row[1]));if(total<=0)return <EmptyLine text="El gráfico de torta necesita valores mayores a cero."/>;let cursor=0;const stops=positive.map((row,index)=>{const start=cursor;cursor+=row[1]/total*100;return `${CHART_COLORS[index%CHART_COLORS.length]} ${start}% ${cursor}%`;});return <div className="pie-chart-wrap"><div className="report-donut" style={{background:`conic-gradient(${stops.join(",")})`}}><div><strong>{format(total)}</strong><small>Total</small></div></div><div className="report-legend">{positive.map(([label,value],index)=><button className={selected===label?"selected":""} key={label} onClick={()=>onSelect(label)}><i style={{background:CHART_COLORS[index%CHART_COLORS.length]}}/><span>{label}</span><strong>{format(value)}</strong></button>)}</div></div>}
   if(type==="line"){const width=760,height=260,pad=40;const plotHeight=height-pad*2;const y=(value:number)=>pad+(domainMax-value)/range*plotHeight;const zeroY=y(0);const points=rows.map(([,value],index)=>`${pad+(rows.length===1?.5:index/(rows.length-1))*(width-pad*2)},${y(value)}`).join(" ");return <div className="line-chart-wrap"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Gráfico de líneas"><line className="chart-zero-line" x1={pad} y1={zeroY} x2={width-pad} y2={zeroY}/><line x1={pad} y1={pad} x2={pad} y2={height-pad}/>{domainMax>0&&<text className="chart-scale-label" x={pad-7} y={pad+4}>{format(domainMax)}</text>}<text className="chart-scale-label" x={pad-7} y={zeroY+4}>0</text>{domainMin<0&&<text className="chart-scale-label" x={pad-7} y={height-pad}>{format(domainMin)}</text>}<polyline points={points}/>{points.split(" ").map((point,index)=>{const[x,yPoint]=point.split(",");return <circle className={selected===rows[index][0]?"selected":""} onClick={()=>onSelect(rows[index][0])} key={rows[index][0]} cx={x} cy={yPoint} r="6"><title>{rows[index][0]}: {format(rows[index][1])}</title></circle>})}</svg><div className="line-labels">{rows.map(([label,value])=><button className={selected===label?"selected":""} onClick={()=>onSelect(label)} key={label}><b>{label}</b><small>{format(value)}</small></button>)}</div></div>}
   return <div className={`analytics-bars ${domainMin<0?"has-negative":""}`}>{rows.map(([label,value],index)=>{const valuePercent=(value-domainMin)/range*100;const left=Math.min(zeroPercent,valuePercent);const width=Math.abs(valuePercent-zeroPercent);return <button className={selected===label?"selected":""} onClick={()=>onSelect(label)} key={label}><strong>{label}</strong><i><em style={{left:`${zeroPercent}%`}}/><b className={value<0?"negative":"positive"} style={{left:`${left}%`,width:`${Math.max(width,.8)}%`,background:CHART_COLORS[index%CHART_COLORS.length]}}/></i><span>{format(value)}</span></button>})}</div>;
@@ -1688,6 +1691,7 @@ function ReportChart({type,rows,metric,selected,onSelect}:{type:"bar"|"line"|"pi
 
 function ChartDrilldown({label,rows,metric,onClose}:{label:string;rows:RecordRow[];metric:string;onClose:()=>void}){
   const suffix=metricSuffix(metric);
+  const metricDigits=["production","yield"].includes(metric)?0:2;
   const [selectedId,setSelectedId]=useState("");
   const [openType,setOpenType]=useState("");
   const groups=Array.from(rows.reduce((map,row)=>{const type=effectiveRecordType(row);map.set(type,[...(map.get(type)??[]),row]);return map},new globalThis.Map<string,RecordRow[]>()).entries())
@@ -1695,7 +1699,7 @@ function ChartDrilldown({label,rows,metric,onClose}:{label:string;rows:RecordRow
   const total=aggregateMetric(rows,metric);
   const fields=new Set(rows.map(row=>relation(row.fields)?.name).filter(Boolean)).size;
   const plots=new Set(rows.map(row=>relation(row.plots)?.name).filter(Boolean)).size;
-  return <section className="chart-drilldown"><header><div><span className="eyebrow">TRAZABILIDAD DEL INDICADOR</span><h4>{label}</h4><p>Empezá por una actividad y abrí solamente el registro que necesitás revisar.</p></div><button className="icon-button" onClick={onClose}><X/></button></header><div className="drilldown-summary"><div><small>Resultado</small><strong>{total.toLocaleString("es-AR",{maximumFractionDigits:2})}{suffix}</strong></div><div><small>Actividades</small><strong>{groups.length}</strong></div><div><small>Registros</small><strong>{rows.length}</strong></div><div><small>Alcance</small><strong>{fields} campo{fields===1?"":"s"} · {plots} lote{plots===1?"":"s"}</strong></div></div><div className="drilldown-type-groups">{groups.map(([type,typeRows])=>{const expanded=openType===type;const subtotal=aggregateMetric(typeRows,metric);return <section className={`drilldown-type ${expanded?"expanded":""}`} key={type}><button className="drilldown-type-head" onClick={()=>{setOpenType(expanded?"":type);setSelectedId("")}}><span className="drilldown-type-icon"><RecordTypeIcon type={type}/></span><div><strong>{recordType(type)}</strong><small>{typeRows.length} registro{typeRows.length===1?"":"s"} · tocar para desplegar</small></div><b>{subtotal.toLocaleString("es-AR",{maximumFractionDigits:2})}{suffix}</b><ChevronDown/></button>{expanded&&<div className="drilldown-type-records">{[...typeRows].sort((a,b)=>b.record_date.localeCompare(a.record_date)).map(row=><div className={`drilldown-entry ${selectedId===row.id?"expanded":""}`} key={row.id}><button className="drilldown-record" onClick={()=>setSelectedId(current=>current===row.id?"":row.id)} aria-expanded={selectedId===row.id}><div><strong>{relation(row.fields)?.name||"Campo"} · {relation(row.plots)?.name||"Sin lote"}</strong><small>{relation(row.campaigns)?.name||"Sin campaña"}</small></div><time>{formatDate(row.record_date)}</time><b>{chartValue(row,metric).toLocaleString("es-AR",{maximumFractionDigits:2})}{suffix}</b><ChevronDown/></button>{selectedId===row.id&&<InlineRecordDetail record={row}/>}</div>)}</div>}</section>})}</div></section>
+  return <section className="chart-drilldown"><header><div><span className="eyebrow">TRAZABILIDAD DEL INDICADOR</span><h4>{label}</h4><p>Empezá por una actividad y abrí solamente el registro que necesitás revisar.</p></div><button className="icon-button" onClick={onClose}><X/></button></header><div className="drilldown-summary"><div><small>Resultado</small><strong>{total.toLocaleString("es-AR",{maximumFractionDigits:metricDigits})}{suffix}</strong></div><div><small>Actividades</small><strong>{groups.length}</strong></div><div><small>Registros</small><strong>{rows.length}</strong></div><div><small>Alcance</small><strong>{fields} campo{fields===1?"":"s"} · {plots} lote{plots===1?"":"s"}</strong></div></div><div className="drilldown-type-groups">{groups.map(([type,typeRows])=>{const expanded=openType===type;const subtotal=aggregateMetric(typeRows,metric);return <section className={`drilldown-type ${expanded?"expanded":""}`} key={type}><button className="drilldown-type-head" onClick={()=>{setOpenType(expanded?"":type);setSelectedId("")}}><span className="drilldown-type-icon"><RecordTypeIcon type={type}/></span><div><strong>{recordType(type)}</strong><small>{typeRows.length} registro{typeRows.length===1?"":"s"} · tocar para desplegar</small></div><b>{subtotal.toLocaleString("es-AR",{maximumFractionDigits:metricDigits})}{suffix}</b><ChevronDown/></button>{expanded&&<div className="drilldown-type-records">{[...typeRows].sort((a,b)=>b.record_date.localeCompare(a.record_date)).map(row=><div className={`drilldown-entry ${selectedId===row.id?"expanded":""}`} key={row.id}><button className="drilldown-record" onClick={()=>setSelectedId(current=>current===row.id?"":row.id)} aria-expanded={selectedId===row.id}><div><strong>{relation(row.fields)?.name||"Campo"} · {relation(row.plots)?.name||"Sin lote"}</strong><small>{relation(row.campaigns)?.name||"Sin campaña"}</small></div><time>{formatDate(row.record_date)}</time><b>{chartValue(row,metric).toLocaleString("es-AR",{maximumFractionDigits:metricDigits})}{suffix}</b><ChevronDown/></button>{selectedId===row.id&&<InlineRecordDetail record={row}/>}</div>)}</div>}</section>})}</div></section>
 }
 
 function InlineRecordDetail({record}:{record:RecordRow}){
@@ -1926,7 +1930,7 @@ function MonitoringEditor({data,setData}:{data:Record<string,string>;setData:(va
 function recordReady(data:Record<string,string>){if(data._wizard_ready!=="true")return false;if(!data.campaign_id||!data.field_id||!data.plot_id||!data.record_date)return false;if(data.record_type==="monitoring")return Boolean(data.crop&&data.phenological_state);if(data.record_type==="napa")return String(data.water_table_depth??"").trim()!=="";if(["sowing","spraying","fertilization"].includes(data.record_type)){const lines:InputLine[]=data.input_lines_json?JSON.parse(data.input_lines_json):[];return lines.length>0&&lines.every(line=>line.inputId&&number(line.dose)>0&&number(line.price)>=0)}return true}
 function RecordSpecificFields({data,setData}:{data:Record<string,string>;setData:(value:Record<string,string>)=>void}){
   const fields=specificRecordFields[data.record_type]??[];
-  return <><div className="specific-fields">{fields.map(([key,label,type])=><label key={key}>{label}<input type={type??"text"} inputMode={type==="number"?"decimal":undefined} min={key==="monitoring_priority"?1:undefined} max={key==="monitoring_priority"?5:undefined} value={data[key]??""} onChange={event=>setData({...data,[key]:event.target.value})}/></label>)}</div>{data.record_type==="monitoring"&&<div className={`gps-form-status ${data.gps_status==="Dentro del lote"?"inside":"outside"}`}><MapPin/><div><strong>{data.gps_status||"Obteniendo ubicación GPS…"}</strong><small>{data.gps_accuracy_m?`Precisión aproximada: ${Math.round(number(data.gps_accuracy_m))} m`:"El monitoreo se puede guardar aunque no haya señal."}</small></div></div>}</>;
+  return <><div className="specific-fields">{fields.map(([key,label,type])=>{const integerProduction=["total_production","yield_per_ha"].includes(key);return <label key={key}>{label}<input type={type??"text"} inputMode={type==="number"?(integerProduction?"numeric":"decimal"):undefined} step={integerProduction?1:undefined} min={key==="monitoring_priority"?1:undefined} max={key==="monitoring_priority"?5:undefined} value={data[key]??""} onChange={event=>setData({...data,[key]:integerProduction?event.target.value.replace(/[^0-9-]/g,""):event.target.value})}/></label>})}</div>{data.record_type==="monitoring"&&<div className={`gps-form-status ${data.gps_status==="Dentro del lote"?"inside":"outside"}`}><MapPin/><div><strong>{data.gps_status||"Obteniendo ubicación GPS…"}</strong><small>{data.gps_accuracy_m?`Precisión aproximada: ${Math.round(number(data.gps_accuracy_m))} m`:"El monitoreo se puede guardar aunque no haya señal."}</small></div></div>}</>;
 }
 function recordDetailsPayload(data:Record<string,string>){
   const baseKeys=new Set(["record_type","record_date","campaign_id","field_id","plot_id","worked_area","contractor","machinery","observations","allow_member_edits","_wizard_ready","input_lines_json","soil_samples_json"]);
@@ -2224,7 +2228,7 @@ function plotOperationalSummary(plot:Plot,records:RecordRow[]){
     const production=number(harvestData.total_production as string|number);
     const yieldValue=number(harvestData.yield_per_ha as string|number)||(area>0?production/area:0);
     const unit=String(harvestData.unit||"kg").trim()||"kg";
-    if(yieldValue>0)yieldPerHa=`${yieldValue.toLocaleString("es-AR",{maximumFractionDigits:1})} ${unit}/ha`;
+    if(yieldValue>0)yieldPerHa=`${yieldValue.toLocaleString("es-AR",{maximumFractionDigits:0})} ${unit}/ha`;
   }
   return {campaign:relation(ordered[0]?.campaigns)?.name||"",lastCrop:cropRecord?recordCrop(cropRecord):"",sowingDate:sowing?.record_date||"",sowingVariety:String(sowingData.variety||"").trim(),yieldPerHa,lastActivity:ordered[0]||null};
 }
@@ -2240,7 +2244,7 @@ function buildPlotMapLabel(plot:MapPlot,records:RecordRow[],assignments:PlotCamp
   const assignment=assignments.find(item=>item.plot_id===plot.id&&item.campaign_id===preferredCampaignId)||assignments.find(item=>item.plot_id===plot.id&&relation(item.campaigns)?.status==="active")||assignments.find(item=>item.plot_id===plot.id);
   const campaignName=relation(contextual[0]?.campaigns)?.name||relation(assignment?.campaigns)?.name||campaigns.find(item=>item.id===preferredCampaignId)?.name||"";
   let yieldText="";
-  if(harvest){const area=number((harvestData.harvested_area??harvest.worked_area) as string|number);const production=number(harvestData.total_production as string|number);const value=number(harvestData.yield_per_ha as string|number)||(area>0?production/area:0);const unit=String(harvestData.unit||"kg").trim()||"kg";if(value>0)yieldText=`${value.toLocaleString("es-AR",{maximumFractionDigits:1})} ${unit}/ha`;}
+  if(harvest){const area=number((harvestData.harvested_area??harvest.worked_area) as string|number);const production=number(harvestData.total_production as string|number);const value=number(harvestData.yield_per_ha as string|number)||(area>0?production/area:0);const unit=String(harvestData.unit||"kg").trim()||"kg";if(value>0)yieldText=`${value.toLocaleString("es-AR",{maximumFractionDigits:0})} ${unit}/ha`;}
   const values:Record<PlotLabelField,string>={plot_name:plot.name,field_name:plot.fieldName,campaign:campaignName,sowing_variety:String(sowingData.variety||"").trim()?String(sowingData.variety).trim():"",sowing_date:sowing?.record_date?formatDate(sowing.record_date):"",last_crop:(lastCropRecord?recordCrop(lastCropRecord):plot.cropName)||"",area:`${number(plot.arable_area).toLocaleString("es-AR",{maximumFractionDigits:2})} ha`,yield_per_ha:yieldText};
   return fields.map(field=>values[field]).filter(Boolean).join("\n")||plot.name;
 }
