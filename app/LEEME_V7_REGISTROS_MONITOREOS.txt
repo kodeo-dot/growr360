@@ -1,0 +1,11 @@
+Growr360 v7 — Registros y Monitoreos
+
+Cambios incluidos:
+- Nueva vista de Registros, más compacta y legible: fecha destacada, labor, campo/lote, cultivo y dato principal por fila.
+- Nueva vista de Monitoreos: cultivo y prioridad sanitaria visibles sin abrir cada ficha.
+- Detalle reorganizado: primero lo esencial; datos técnicos, costos y GPS quedan plegados para evitar el “choclo” visual.
+- Insumos en detalle con dosis grande y legible, respetando unidades como kg/ha, lt/ha o cc/100kg.
+- Al finalizar una OT, cada registro por lote hereda automáticamente el último cultivo con dato de cultivo que exista en el historial de ese lote (incluidos monitoreos). Se guarda también crop_source_record_id para trazabilidad.
+- Si el lote todavía no tiene ningún registro/monitoreo con cultivo informado, el registro de la OT queda sin cultivo en lugar de inventar uno.
+
+No requiere SQL adicional respecto de v6.
