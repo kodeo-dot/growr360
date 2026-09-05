@@ -185,3 +185,10 @@
  .work-order-product-table-head{display:grid!important;background:#f3f7f4!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
  .work-order-product-row span{font-size:10px}.work-order-product-row strong{font-size:11px}
 }
+
+
+/* OT list: allow the directory card to grow with its rows; page handles vertical scroll */
+.work-orders-page{min-height:max-content!important;overflow:visible!important}
+.work-order-directory{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+.work-order-list{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+.work-order-list>button{flex-shrink:0}

@@ -2036,7 +2036,13 @@ function cap(value: string) { return value.charAt(0).toUpperCase() + value.slice
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "G"; }
 function roleName(role?: string) { return ({ owner: "Propietario", admin: "Administrador", agronomist: "Ingeniero / Agrónomo", operator: "Operador", monitor: "Monitoreador", producer: "Productor", member: "Miembro" } as Record<string, string>)[role ?? ""] ?? cap(role ?? "Miembro"); }
 function recordType(type: string) { return ({ sowing: "Siembra", spraying: "Pulverización", fertilization: "Fertilización", harvest: "Cosecha", work: "Roturación", monitoring: "Monitoreo", napa: "Napa", soil_analysis: "Análisis de suelo", expense: "Gasto", other: "Otros" } as Record<string, string>)[type] ?? cap(type); }
-function formatDate(value: string) { const date = new Date(`${value}T12:00:00`); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", year: "numeric" }).format(date); }
+function formatDate(value: string) {
+  if (!value) return "";
+  const raw = String(value).trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const date = new Date(dateOnly ? `${raw}T12:00:00` : raw);
+  return Number.isNaN(date.getTime()) ? raw : new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
 function plotColor(plot: Plot, layer: string) { if (layer === "prioridad") return plot.priority_color || "#718078"; return plot.cropColor || "#77847e"; }
 function recordCrop(row: RecordRow) {
