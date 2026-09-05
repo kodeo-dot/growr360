@@ -1,0 +1,9 @@
+Growr360 v33 — UI satelital rediseñado
+
+- Panel movido a la esquina inferior derecha para no superponerse con el buscador.
+- Tipografía aumentada en controles, índices, historial y fechas.
+- Layout más denso: menos padding y menos espacio muerto.
+- Historial horizontal conservado, con miniaturas más legibles.
+- Selector de lote y opacidad compactados en una sola fila.
+- Minimizado/maximizado conservado.
+- Lógica de planes, índices y NDVI 3 zonas de v32 sin cambios.
