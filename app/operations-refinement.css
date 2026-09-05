@@ -61,6 +61,49 @@
   .print-only-brand-header span{font-size:15px;font-weight:800;color:#0b2f26;letter-spacing:-.02em}
   .print-only-brand-header span b{color:#0f7a4f;font-weight:800}
   .print-only-brand-footer{display:block!important;margin-top:22px;padding-top:12px;border-top:1px solid #d8e4dc;color:#718079;font-size:10px;text-align:center}
+
+  /* Estado de la OT en PDF: pendiente/en curso visibles; cancelado como sello sobre toda la hoja. */
+  .work-order-sheet .work-order-detail .status-pending,
+  .work-order-sheet .work-order-detail .status-in_progress{
+    display:inline-flex!important;
+    align-items:center;
+    min-height:34px;
+    padding:8px 15px!important;
+    font-size:15px!important;
+    line-height:1!important;
+    letter-spacing:.045em;
+    text-transform:uppercase;
+    font-weight:900!important;
+    border:1px solid currentColor;
+  }
+
+  .work-order-sheet.status-cancelled{position:fixed!important;isolation:isolate}
+  .work-order-sheet.status-cancelled::after{
+    content:"CANCELADO";
+    position:fixed;
+    z-index:9999;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%) rotate(-17deg);
+    width:min(82vw,760px);
+    padding:18px 24px 14px;
+    border-top:9px solid rgba(166,35,27,.34);
+    border-bottom:9px solid rgba(166,35,27,.34);
+    color:rgba(166,35,27,.27);
+    font-size:clamp(58px,10vw,108px);
+    line-height:.92;
+    font-weight:950;
+    letter-spacing:.08em;
+    text-align:center;
+    text-transform:uppercase;
+    white-space:nowrap;
+    pointer-events:none;
+  }
+  .work-order-sheet.status-cancelled .work-order-detail .status-cancelled{
+    font-size:13px!important;
+    font-weight:900!important;
+    text-transform:uppercase;
+  }
 }
 
 /* Solicitudes: bloque operativo compacto, no una lista de formulario genérica. */
