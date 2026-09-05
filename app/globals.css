@@ -1040,3 +1040,10 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
   .record-detail-ot-facts article{padding:8px!important}
   .record-ot-input-list>article{grid-template-columns:1fr!important}
 }
+
+/* Growr360 v27 · dosis más legibles en el listado de registros */
+.records-ot-list .input-summary{gap:5px}
+.records-ot-list .input-summary>span{align-items:center;gap:14px}
+.records-ot-list .input-summary>span>strong{font-size:11px;font-weight:750;color:var(--ink)}
+.records-ot-list .input-summary>span>small{font-size:13px;font-weight:850;color:var(--ink);line-height:1.15;letter-spacing:-.01em}
+@media(max-width:520px){.records-ot-list .input-summary>span{gap:8px}.records-ot-list .input-summary>span>small{font-size:12px}}
