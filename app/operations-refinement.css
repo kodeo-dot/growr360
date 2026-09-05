@@ -269,3 +269,37 @@
  .work-order-print-host .work-order-sheet.status-cancelled{position:static!important;isolation:isolate}
  .work-order-print-host .work-order-sheet.status-cancelled::after{content:"CANCELADO";position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-17deg);width:72%;padding:12px 18px 10px;border-top:7px solid rgba(166,35,27,.30);border-bottom:7px solid rgba(166,35,27,.30);color:rgba(166,35,27,.22);font-size:62pt;line-height:.92;font-weight:950;letter-spacing:.08em;text-align:center;text-transform:uppercase;white-space:nowrap;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* OT v6 — multi-lote + legibilidad operativa */
+.work-order-lot-picker{margin-top:12px;border:1px solid #dce7df;border-radius:14px;overflow:hidden;background:#fff}
+.work-order-lot-picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#f6f9f7;border-bottom:1px solid #e4ebe6}
+.work-order-lot-picker-head strong{font-size:13px}.work-order-lot-picker-head small{font-size:11px;color:#65756c;font-weight:750}
+.work-order-lot-picker>article{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border-bottom:1px solid #edf1ee}
+.work-order-lot-picker>article:last-child{border-bottom:0}.work-order-lot-picker>article.selected{background:#f4faf6}
+.work-order-lot-picker>article>label:first-child{display:flex;align-items:center;gap:10px;flex:1;margin:0;min-width:0}
+.work-order-lot-picker input[type="checkbox"]{width:19px;height:19px;min-height:0;accent-color:#13794f}
+.work-order-lot-picker label span strong,.work-order-lot-picker label span small{display:block}.work-order-lot-picker label span strong{font-size:14px}.work-order-lot-picker label span small{font-size:11px;color:#718078;margin-top:2px}
+.work-order-lot-picker .lot-area{display:grid;grid-template-columns:auto 100px auto;align-items:center;gap:7px;margin:0;font-size:10px;font-weight:850;color:#52645a;text-transform:uppercase;letter-spacing:.04em}
+.work-order-lot-picker .lot-area input{min-height:38px;padding:7px 9px;text-align:right}
+.work-order-area-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:12px;padding:13px 15px;border:1px solid #cae1d2;border-radius:12px;background:#edf8f1}
+.work-order-area-summary small{font-size:9px;font-weight:900;letter-spacing:.08em;color:#568069}.work-order-area-summary strong{font-size:21px;color:#135f3e}
+.work-order-lots-detail{margin-top:14px}.work-order-lots-detail>h3{margin:0 0 8px;font-size:16px}.work-order-lots-detail>div{border:1px solid #dfe8e2;border-radius:14px;overflow:hidden;background:#fff}
+.work-order-lots-detail article{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:11px 14px;border-bottom:1px solid #e8eeea}.work-order-lots-detail article:last-child{border-bottom:0}
+.work-order-lots-detail article strong,.work-order-lots-detail article small{display:block}.work-order-lots-detail article strong{font-size:14px}.work-order-lots-detail article small{font-size:10.5px;color:#728078;margin-top:2px}.work-order-lots-detail article b{font-size:15px;color:#173d2d;white-space:nowrap}
+.work-order-product-table-readable .work-order-product-row strong{font-size:16px!important;line-height:1.25;color:#14261d}
+.work-order-product-table-readable .work-order-dose{font-size:16px!important;line-height:1.2;color:#0e6541!important;font-weight:950!important}
+.work-order-product-table-readable .work-order-product-row>span{font-size:13px!important;font-weight:750;color:#4f6057}
+.work-order-product-table-readable .work-order-product-table-head{font-size:10px!important}
+.completion-summary{display:flex;align-items:flex-start;gap:12px;padding:15px 16px;margin-bottom:14px;border:1px solid #cfe3d5;border-radius:14px;background:#f1f9f4}
+.completion-summary>svg{width:22px;height:22px;color:#11764a;flex:0 0 auto}.completion-summary strong{display:block;font-size:16px}.completion-summary p{margin:4px 0 0;color:#596a61;font-size:12px;line-height:1.45}
+@media(max-width:650px){.work-order-lot-picker>article{align-items:flex-start;flex-direction:column}.work-order-lot-picker .lot-area{width:100%;grid-template-columns:1fr 110px auto}.work-order-product-table-readable .work-order-product-row strong,.work-order-product-table-readable .work-order-dose{font-size:14px!important}}
+@media print{
+ .work-order-print-host .work-order-lots-detail{margin-top:7px!important;break-inside:auto}
+ .work-order-print-host .work-order-lots-detail>h3{font-size:11pt!important;margin:0 0 5px!important}
+ .work-order-print-host .work-order-lots-detail>div{border-radius:7px!important;overflow:visible!important}
+ .work-order-print-host .work-order-lots-detail article{padding:6px 8px!important;break-inside:avoid}
+ .work-order-print-host .work-order-lots-detail article strong{font-size:9.5pt!important}.work-order-print-host .work-order-lots-detail article b{font-size:9.5pt!important}
+ .work-order-print-host .work-order-product-table-readable .work-order-product-row strong{font-size:11pt!important}
+ .work-order-print-host .work-order-product-table-readable .work-order-dose{font-size:11pt!important;color:#111!important}
+ .work-order-print-host .work-order-product-table-readable .work-order-product-row>span{font-size:9.5pt!important}
+}

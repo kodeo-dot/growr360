@@ -1,0 +1,19 @@
+Growr360 — actualización de Órdenes de Trabajo multi-lote
+
+ANTES DE PUBLICAR:
+1. Abrí Supabase > SQL Editor.
+2. Ejecutá completo el archivo OT_MULTI_LOT_RECORDS.sql.
+3. Luego publicá esta versión.
+
+Qué agrega:
+- Varios lotes dentro de una OT, siempre del mismo campo.
+- Superficie individual por lote y superficie total automática.
+- Selector de unidades de dosis: kg/ha, lt/ha, cc/ha, gr/ha, ton/ha, cc/100kg.
+- Dosis más grande/legible en pantalla y PDF.
+- Al editar, conserva fecha, campo, lotes, superficies e insumos.
+- Al finalizar una OT crea UN REGISTRO FORMAL POR LOTE con los insumos/dosis de la orden.
+- La finalización es idempotente: si se interrumpe a mitad, no vuelve a duplicar registros ya creados para la misma OT/lote.
+
+Compatibilidad:
+- OT existentes de un solo lote se migran automáticamente a work_order_plots al ejecutar el SQL.
+- work_orders.plot_id y planned_area se siguen completando como compatibilidad con código/reportes existentes.
