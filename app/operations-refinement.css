@@ -152,3 +152,28 @@
 .work-order-actions{gap:10px;padding-top:18px}.work-order-actions button{min-height:44px;padding:0 15px;border-radius:12px}.work-order-actions .primary-action{margin-left:auto;background:#123e2e;color:#fff;border-color:#123e2e}
 .work-order-member-edits{display:flex!important;grid-template-columns:auto 1fr!important;align-items:flex-start;gap:11px!important;padding:15px 16px;border:1px solid #dce8df;border-radius:14px;background:#f7faf8;color:#17271f!important}
 .work-order-member-edits input{width:18px;height:18px;min-height:0!important;margin-top:2px;accent-color:#168253}.work-order-member-edits span,.work-order-member-edits strong,.work-order-member-edits small{display:block}.work-order-member-edits strong{font-size:13px}.work-order-member-edits small{margin-top:3px;color:#6b7a71;font-size:11px;font-weight:600}
+
+
+/* OT list: let the directory grow with its content instead of clipping rows. */
+.work-orders-page{
+  align-content:start;
+  grid-auto-rows:max-content;
+  min-height:max-content;
+}
+.work-order-directory{
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  align-self:start;
+}
+.work-order-directory .work-order-list{
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding-bottom:2px;
+}
+.work-order-directory .work-order-list>button:last-of-type{
+  margin-bottom:0;
+}
