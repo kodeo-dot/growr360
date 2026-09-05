@@ -1,0 +1,18 @@
+Growr360 v17 — límites de plan + UX
+
+Cambios principales:
+- La web ahora usa los límites cargados en subscription_plans para bloquear NUEVAS altas de campos/lotes cuando corresponde.
+- El límite de hectáreas se controla antes de guardar un lote y antes de importar un KML/KMZ completo.
+- Si el grupo ya está por encima de un límite, NO se elimina ni modifica ningún dato existente; sólo se bloquean nuevas altas que agraven el exceso.
+- max_users se respeta al crear invitaciones y al aprobar nuevas solicitudes de ingreso.
+- El catálogo de Planes deja de afirmar que campos/lotes son ilimitados cuando la fila de subscription_plans tiene un límite.
+- Growr Free muestra un CTA discreto hacia Planes.
+- La primera vez que este navegador detecta Pro o Business para un grupo muestra una bienvenida. Se guarda localmente por grupo+plan.
+- Campañas pasó a Gestión.
+- El menú lateral completo scrollea, dejando fijos el grupo activo y el usuario.
+- “Más” usa una única lista vertical.
+- Visor de fotos corregido: flechas siempre visibles, imagen contenida y nombre de archivo legible.
+- Detalle de Registros/Monitoreos reorganizado como ficha continua, sin scroll horizontal y con menos cajas separadas.
+
+Nota técnica:
+Los bloqueos implementados aquí son de producto/UI web y leen la fuente real de planes de Supabase. Para impedir además escrituras realizadas fuera de Growr360 Web (scripts o clientes externos), conviene replicar los límites con políticas/funciones del backend.

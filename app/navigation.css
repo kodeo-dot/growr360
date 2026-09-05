@@ -53,3 +53,8 @@
   .topbar-group-picker select{height:28px!important;font-size:11px!important}
   .sync-pill{display:none!important}
 }
+
+/* Growr360 v17 · menú lateral: navegación scrollable, identidad fija */
+.sidebar-navigation{overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;scrollbar-width:thin;scrollbar-color:#ffffff22 transparent;padding-right:3px!important}
+.sidebar-navigation::-webkit-scrollbar{width:5px}.sidebar-navigation::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:9px}.sidebar-footer{position:relative;z-index:2;flex:0 0 auto!important;background:inherit;padding-top:7px;border-top:1px solid #ffffff10}
+.nav-submenu,.nav-group:last-child .nav-submenu{display:flex!important;flex-direction:column!important;grid-template-columns:none!important;gap:2px!important}.nav-group:last-child .nav-subitem{width:100%!important;min-height:34px!important;padding:6px 8px!important;font-size:11px!important}.nav-group:last-child .nav-subitem:last-child{grid-column:auto!important}.nav-group:last-child .nav-subitem span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
