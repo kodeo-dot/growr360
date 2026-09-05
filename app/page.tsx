@@ -3,6 +3,7 @@
 import "./landing-v3.css";
 import "./operations-refinement.css";
 import "./visual-refresh.css";
+import "./landing-redesign.css";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
@@ -341,34 +342,212 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
 }
 
 function PublicLanding({ onLogin, onRegister, onLegal }: { onLogin: () => void; onRegister: () => void; onLegal: (page:"terms"|"privacy"|"faq") => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     document.body.classList.add("public-site-open");
     return () => document.body.classList.remove("public-site-open");
   }, []);
-  const modules=[
-    {label:"Territorio",text:"Mapa, campos, lotes y campañas en contexto.",icon:Map},
-    {label:"Trabajo diario",text:"Registros y monitoreos simples, aun desde el lote.",icon:FileText},
-    {label:"Decisiones",text:"Reportes claros e imágenes Planet Insights para actuar a tiempo.",icon:BarChart3},
-    {label:"Equipo",text:"Personas, permisos y responsabilidades sin cruces.",icon:Users}
+  useEffect(() => {
+    document.body.classList.toggle("gr-menu-open", menuOpen);
+    return () => { document.body.classList.remove("gr-menu-open"); };
+  }, [menuOpen]);
+  const modules = [
+    { label: "Territorio", text: "Mapa, campos, lotes y campañas en contexto.", icon: Map },
+    { label: "Trabajo diario", text: "Registros y monitoreos simples, aun desde el lote.", icon: FileText },
+    { label: "Decisiones", text: "Reportes claros e imágenes Planet Insights para actuar a tiempo.", icon: BarChart3 },
+    { label: "Equipo", text: "Personas, permisos y responsabilidades sin cruces.", icon: Users },
   ];
-  return <div className="public-site public-site-v3 pastel-landing">
-    <header className="public-header public-header-v3"><div className="public-header-main"><div className="landing-logo-tab"><Brand/></div><nav><a href="#producto">Plataforma</a><a href="#funciones">Funciones</a><a href="#soluciones">Soluciones</a><a href="#nosotros">Quiénes somos</a></nav><div className="public-auth-actions"><button className="public-login" onClick={onLogin}>Ingresar</button><button className="public-cta" onClick={onRegister}>Crear cuenta</button></div></div></header>
-    <main>
-      <section className="public-hero-v3 growr-hero"><div className="growr-hero-copy"><span>GESTIÓN AGRÍCOLA, SIN VUELTAS</span><h1>El campo habla.<br/>Growr lo ordena.</h1><p>Una vista compartida para saber qué pasó, qué está pasando y qué necesita atención en cada lote.</p><div><button className="public-cta public-cta-light" onClick={onRegister}>Empezar ahora <ArrowRight/></button><button className="public-hero-login" onClick={onLogin}>Ya tengo cuenta</button></div><ul><li><i/>Web y app sincronizadas</li><li><i/>Pensado para trabajar en el campo</li></ul></div><div className="growr-hero-photo"><img src="/landing/juan-manuel-field.png" alt="Juan Manuel Iglesias utilizando Growr360 en un lote"/><div><strong>Datos de campo</strong><span>convertidos en decisiones</span></div></div></section>
+  const navLinks = [
+    { href: "#producto", label: "Plataforma" },
+    { href: "#funciones", label: "Funciones" },
+    { href: "#soluciones", label: "Soluciones" },
+    { href: "#nosotros", label: "Quiénes somos" },
+  ];
+  const closeMenu = () => setMenuOpen(false);
+  return (
+    <div className="gr-landing">
+      <header className="gr-nav">
+        <div className="gr-nav-inner">
+          <div className="gr-nav-brand"><Brand/></div>
+          <nav className="gr-nav-links">
+            {navLinks.map(link => <a key={link.href} href={link.href}>{link.label}</a>)}
+          </nav>
+          <div className="gr-nav-actions">
+            <button className="gr-btn gr-btn-ghost" onClick={onLogin}>Ingresar</button>
+            <button className="gr-btn gr-btn-solid" onClick={onRegister}>Crear cuenta</button>
+          </div>
+          <button className="gr-nav-toggle" type="button" aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
+            {menuOpen ? <X/> : <Menu/>}
+          </button>
+        </div>
+        <div className={`gr-nav-mobile${menuOpen ? " is-open" : ""}`}>
+          <div className="gr-nav-mobile-inner">
+            <nav>{navLinks.map(link => <a key={link.href} href={link.href} onClick={closeMenu}>{link.label}</a>)}</nav>
+            <div className="gr-nav-mobile-actions">
+              <button className="gr-btn gr-btn-outline" onClick={() => { closeMenu(); onLogin(); }}>Ingresar</button>
+              <button className="gr-btn gr-btn-solid" onClick={() => { closeMenu(); onRegister(); }}>Crear cuenta</button>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      <section id="producto" className="module-overview growr-workflow"><div className="section-intro"><span>UN SISTEMA, CUATRO MOMENTOS</span><h2>De mirar el lote a decidir qué hacer.</h2><p>Growr conecta la geografía, el trabajo, el análisis y las personas sin duplicar información.</p></div><div className="module-rail">{modules.map(({label,text,icon:Icon},index)=><article key={label}><span>0{index+1}</span><div className={`module-icon module-icon-${index}`}><Icon/></div><div><strong>{label}</strong><p>{text}</p></div></article>)}</div></section>
+      <main className="gr-main">
+        <section className="gr-hero">
+          <div className="gr-hero-copy">
+            <span className="gr-eyebrow">GESTIÓN AGRÍCOLA, SIN VUELTAS</span>
+            <h1>El campo habla.<br/>Growr lo ordena.</h1>
+            <p>Una vista compartida para saber qué pasó, qué está pasando y qué necesita atención en cada lote.</p>
+            <div className="gr-hero-actions">
+              <button className="gr-btn gr-btn-solid gr-btn-lg" onClick={onRegister}>Empezar ahora <ArrowRight/></button>
+              <button className="gr-btn gr-btn-outline gr-btn-lg" onClick={onLogin}>Ya tengo cuenta</button>
+            </div>
+            <ul className="gr-hero-points">
+              <li><Check/>Web y app sincronizadas</li>
+              <li><Check/>Pensado para trabajar en el campo</li>
+            </ul>
+          </div>
+          <div className="gr-hero-media">
+            <img src="/landing/juan-manuel-field.png" alt="Juan Manuel Iglesias utilizando Growr360 en un lote"/>
+            <div className="gr-hero-tag"><strong>Datos de campo</strong><span>convertidos en decisiones</span></div>
+          </div>
+        </section>
 
-      <section id="funciones" className="product-stories growr-product-stories"><article className="product-story product-story-map landing-reveal"><div className="product-story-copy"><span>01 · MAPA PRODUCTIVO</span><h2>Primero, entender dónde.</h2><p>Campañas, cultivos, prioridades y monitoreos viven sobre el mismo mapa. Buscá un lote, enfocá la zona y actuá sin atravesar menús.</p><ul><li><Check/>Capas y filtros por campaña</li><li><Check/>Monitoreos geolocalizados</li><li><Check/>Imágenes e índices NDVI con Planet Insights</li></ul></div><ProductScreenshot src="/landing/growr-map-current.png" alt="Mapa productivo actual de Growr360" label="Vista territorial"/></article><article className="product-story product-story-reports landing-reveal"><ProductScreenshot src="/landing/growr-reports-current.png" alt="Reporte actual de avance de siembra de Growr360" label="Avance diario"/><div className="product-story-copy"><span>02 · REPORTES OPERATIVOS</span><h2>Después, entender por qué.</h2><p>Cada gráfico conserva el vínculo con los registros que lo explican. Podés pasar del total al trabajo concreto sin perderte en tablas interminables.</p><ul><li><Check/>Superficie acumulada día por día</li><li><Check/>Costos, rendimiento y contratistas</li><li><Check/>Detalle agrupado por actividad</li></ul></div></article></section>
+        <section id="producto" className="gr-modules">
+          <div className="gr-section-head">
+            <span className="gr-eyebrow">UN SISTEMA, CUATRO MOMENTOS</span>
+            <h2>De mirar el lote a decidir qué hacer.</h2>
+            <p>Growr conecta la geografía, el trabajo, el análisis y las personas sin duplicar información.</p>
+          </div>
+          <div className="gr-module-grid">
+            {modules.map(({ label, text, icon: Icon }, index) => (
+              <article key={label} className="gr-module-card">
+                <div className={`gr-module-icon gr-module-icon-${index}`}><Icon/></div>
+                <strong>{label}</strong>
+                <p>{text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-      <section id="soluciones" className="value-section"><div className="section-intro"><span>HECHO PARA EL TRABAJO REAL</span><h2>Menos tiempo buscando datos.<br/>Más tiempo tomando decisiones.</h2></div><div className="value-grid"><article className="landing-reveal"><ClockIcon/><strong>Trabajo ágil</strong><p>Flujos simples para cargar información mientras la labor sucede.</p></article><article className="landing-reveal"><Users/><strong>Equipo coordinado</strong><p>Roles, permisos y varios grupos sin mezclar responsabilidades.</p></article><article className="landing-reveal"><CloudSun/><strong>Dentro y fuera del campo</strong><p>La misma información disponible en web y aplicación móvil.</p></article><article className="landing-reveal"><ShieldCheck/><strong>Trazabilidad completa</strong><p>Historial, fotos y responsables asociados a cada registro.</p></article></div></section>
+        <section id="funciones" className="gr-stories">
+          <article className="gr-story">
+            <div className="gr-story-copy">
+              <span className="gr-eyebrow">01 · MAPA PRODUCTIVO</span>
+              <h2>Primero, entender dónde.</h2>
+              <p>Campañas, cultivos, prioridades y monitoreos viven sobre el mismo mapa. Buscá un lote, enfocá la zona y actuá sin atravesar menús.</p>
+              <ul>
+                <li><Check/>Capas y filtros por campaña</li>
+                <li><Check/>Monitoreos geolocalizados</li>
+                <li><Check/>Imágenes e índices NDVI con Planet Insights</li>
+              </ul>
+            </div>
+            <ProductScreenshot src="/landing/growr-map-current.png" alt="Mapa productivo actual de Growr360" label="Vista territorial"/>
+          </article>
+          <article className="gr-story gr-story-reverse">
+            <ProductScreenshot src="/landing/growr-reports-current.png" alt="Reporte actual de avance de siembra de Growr360" label="Avance diario"/>
+            <div className="gr-story-copy">
+              <span className="gr-eyebrow">02 · REPORTES OPERATIVOS</span>
+              <h2>Después, entender por qué.</h2>
+              <p>Cada gráfico conserva el vínculo con los registros que lo explican. Podés pasar del total al trabajo concreto sin perderte en tablas interminables.</p>
+              <ul>
+                <li><Check/>Superficie acumulada día por día</li>
+                <li><Check/>Costos, rendimiento y contratistas</li>
+                <li><Check/>Detalle agrupado por actividad</li>
+              </ul>
+            </div>
+          </article>
+        </section>
 
-      <section id="nosotros" className="about-v3"><div className="about-v3-photo"><img src="/landing/juan-manuel-field.png" alt="Juan Manuel Iglesias trabajando con Growr360 en el campo"/><span>Chivilcoy · Buenos Aires</span></div><div className="about-v3-copy"><span>QUIÉNES SOMOS</span><h2>Una herramienta creada desde el campo.</h2><p>Growr360 nace en Chivilcoy para resolver una necesidad concreta: que la información agrícola sea fácil de cargar, compartir y entender, incluso cuando el trabajo ocurre lejos de una oficina.</p><blockquote>“La tecnología tiene valor cuando simplifica una decisión real.”</blockquote><div className="founder-list"><article><img src="/team/juan-manuel-iglesias.jpg" alt="Juan Manuel Iglesias"/><div><strong>Juan Manuel Iglesias</strong><span>Ingeniero Agrónomo · Campo y producción</span></div></article><article><img src="/team/benicio-iglesias-plante-v2.jpg" alt="Benicio Iglesias Plante"/><div><strong>Benicio Iglesias Plante</strong><span>Producto y desarrollo tecnológico</span></div></article></div></div></section>
+        <section id="soluciones" className="gr-values">
+          <div className="gr-section-head gr-section-head-light">
+            <span className="gr-eyebrow">HECHO PARA EL TRABAJO REAL</span>
+            <h2>Menos tiempo buscando datos.<br/>Más tiempo tomando decisiones.</h2>
+          </div>
+          <div className="gr-value-grid">
+            <article><History/><strong>Trabajo ágil</strong><p>Flujos simples para cargar información mientras la labor sucede.</p></article>
+            <article><Users/><strong>Equipo coordinado</strong><p>Roles, permisos y varios grupos sin mezclar responsabilidades.</p></article>
+            <article><CloudSun/><strong>Dentro y fuera del campo</strong><p>La misma información disponible en web y aplicación móvil.</p></article>
+            <article><ShieldCheck/><strong>Trazabilidad completa</strong><p>Historial, fotos y responsables asociados a cada registro.</p></article>
+          </div>
+        </section>
 
-      <section className="legal-section legal-section-v3 legal-links"><div className="section-intro"><span>INFORMACIÓN CLARA</span><h2>Tu operación, tus datos.</h2><p>Todo lo que cargás en Growr360 sigue siendo tuyo y podés solicitar una copia completa de tu información.</p></div><div className="legal-grid"><a href="/terminos"><FileText/><span><strong>Términos y condiciones</strong><small>Cómo funciona la plataforma.</small></span><ChevronRight/></a><a href="/privacidad"><ShieldCheck/><span><strong>Privacidad y datos</strong><small>Qué protegemos y cómo.</small></span><ChevronRight/></a><a href="/faq"><CircleUserRound/><span><strong>Preguntas frecuentes</strong><small>Respuestas sobre uso y respaldo.</small></span><ChevronRight/></a></div></section>
-      <section className="public-final public-final-v3"><div><span>EMPEZÁ CON TU OPERACIÓN</span><h2>El campo no se detiene.<br/>Tu información tampoco.</h2><p>Creá tu cuenta y organizá el trabajo de tu equipo en un solo lugar.</p></div><button className="public-cta public-cta-light" onClick={onRegister}>Crear cuenta <ArrowRight/></button></section>
-    </main>
-    <footer className="public-footer public-footer-v2"><div className="footer-shell"><div className="footer-brand-block"><Brand/><p>Gestión agrícola inteligente para equipos que necesitan trabajar con información clara, dentro y fuera del campo.</p><span><MapPin/>Chivilcoy, Buenos Aires · Argentina</span><a href="tel:+5492346458558"><Phone/>+54 9 2346 458558</a><a href="mailto:info@growr.com"><Mail/>info@growr.com</a></div><div className="footer-links"><strong>Growr360</strong><a href="#producto">Plataforma</a><a href="#funciones">Funciones</a><a href="#nosotros">Quiénes somos</a></div><div className="footer-links"><strong>Información</strong><a href="/terminos">Términos y condiciones</a><a href="/privacidad">Privacidad</a><a href="/faq">Preguntas frecuentes</a></div><div className="footer-downloads"><strong>Growr360 en todos tus dispositivos</strong><p>Trabajá desde la computadora o llevá la gestión al campo.</p><div><button className="store-badge" aria-label="Google Play próximamente"><img src="/google-play-badge.png" alt="Disponible en Google Play"/><small>PRÓXIMAMENTE</small></button><button className="web-access-badge" onClick={onLogin}><Map/><span><small>ACCESO DESDE</small><strong>Aplicación web</strong></span></button></div></div><div className="footer-bottom"><span>© 2026 Growr360. Todos los derechos reservados.</span><span>Hecho en Chivilcoy para el campo argentino.</span></div></div></footer>
-  </div>;
+        <section id="nosotros" className="gr-about">
+          <div className="gr-about-media">
+            <img src="/landing/juan-manuel-field.png" alt="Juan Manuel Iglesias trabajando con Growr360 en el campo"/>
+            <span><MapPin/>Chivilcoy · Buenos Aires</span>
+          </div>
+          <div className="gr-about-copy">
+            <span className="gr-eyebrow">QUIÉNES SOMOS</span>
+            <h2>Una herramienta creada desde el campo.</h2>
+            <p>Growr360 nace en Chivilcoy para resolver una necesidad concreta: que la información agrícola sea fácil de cargar, compartir y entender, incluso cuando el trabajo ocurre lejos de una oficina.</p>
+            <blockquote>“La tecnología tiene valor cuando simplifica una decisión real.”</blockquote>
+            <div className="gr-founders">
+              <article><img src="/team/juan-manuel-iglesias.jpg" alt="Juan Manuel Iglesias"/><div><strong>Juan Manuel Iglesias</strong><span>Ingeniero Agrónomo · Campo y producción</span></div></article>
+              <article><img src="/team/benicio-iglesias-plante-v2.jpg" alt="Benicio Iglesias Plante"/><div><strong>Benicio Iglesias Plante</strong><span>Producto y desarrollo tecnológico</span></div></article>
+            </div>
+          </div>
+        </section>
+
+        <section className="gr-legal-links">
+          <div className="gr-section-head">
+            <span className="gr-eyebrow">INFORMACIÓN CLARA</span>
+            <h2>Tu operación, tus datos.</h2>
+            <p>Todo lo que cargás en Growr360 sigue siendo tuyo y podés solicitar una copia completa de tu información.</p>
+          </div>
+          <div className="gr-legal-grid">
+            <a href="/terminos"><FileText/><span><strong>Términos y condiciones</strong><small>Cómo funciona la plataforma.</small></span><ChevronRight/></a>
+            <a href="/privacidad"><ShieldCheck/><span><strong>Privacidad y datos</strong><small>Qué protegemos y cómo.</small></span><ChevronRight/></a>
+            <a href="/faq"><CircleUserRound/><span><strong>Preguntas frecuentes</strong><small>Respuestas sobre uso y respaldo.</small></span><ChevronRight/></a>
+          </div>
+        </section>
+
+        <section className="gr-final">
+          <div>
+            <span className="gr-eyebrow">EMPEZÁ CON TU OPERACIÓN</span>
+            <h2>El campo no se detiene.<br/>Tu información tampoco.</h2>
+            <p>Creá tu cuenta y organizá el trabajo de tu equipo en un solo lugar.</p>
+          </div>
+          <button className="gr-btn gr-btn-solid gr-btn-lg" onClick={onRegister}>Crear cuenta <ArrowRight/></button>
+        </section>
+      </main>
+
+      <footer className="gr-footer">
+        <div className="gr-footer-grid">
+          <div className="gr-footer-brand">
+            <Brand/>
+            <p>Gestión agrícola inteligente para equipos que necesitan trabajar con información clara, dentro y fuera del campo.</p>
+            <span><MapPin/>Chivilcoy, Buenos Aires · Argentina</span>
+            <a href="tel:+5492346458558"><Phone/>+54 9 2346 458558</a>
+            <a href="mailto:info@growr.com"><Mail/>info@growr.com</a>
+          </div>
+          <div className="gr-footer-links">
+            <strong>Growr360</strong>
+            <a href="#producto">Plataforma</a>
+            <a href="#funciones">Funciones</a>
+            <a href="#nosotros">Quiénes somos</a>
+          </div>
+          <div className="gr-footer-links">
+            <strong>Información</strong>
+            <a href="/terminos">Términos y condiciones</a>
+            <a href="/privacidad">Privacidad</a>
+            <a href="/faq">Preguntas frecuentes</a>
+          </div>
+          <div className="gr-footer-downloads">
+            <strong>Growr360 en todos tus dispositivos</strong>
+            <p>Trabajá desde la computadora o llevá la gestión al campo.</p>
+            <div>
+              <button className="gr-store-badge" aria-label="Google Play próximamente"><img src="/google-play-badge.png" alt="Disponible en Google Play"/><small>PRÓXIMAMENTE</small></button>
+              <button className="gr-web-badge" onClick={onLogin}><Map/><span><small>ACCESO DESDE</small><strong>Aplicación web</strong></span></button>
+            </div>
+          </div>
+        </div>
+        <div className="gr-footer-bottom">
+          <span>© 2026 Growr360. Todos los derechos reservados.</span>
+          <span>Hecho en Chivilcoy para el campo argentino.</span>
+        </div>
+      </footer>
+    </div>
+  );
 }
 
 function LegalInformationPage({page,onBack,onLogin}:{page:"terms"|"privacy"|"faq";onBack:()=>void;onLogin:()=>void}){
@@ -1948,3 +2127,4 @@ function calculateGeometry(points: number[][]): GeoFeature {
   }
   return { type: "Feature", geometry: { type: "Polygon", coordinates: [[...points, points[0]]] }, properties: { area_ha: Math.abs(twiceArea) / 2 / 10000, perimeter_m: perimeter, center_latitude: lat, center_longitude: lon, reference: "Trazado desde Growr360 Web" } };
 }
+
