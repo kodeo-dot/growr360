@@ -16,7 +16,7 @@ import {
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
   , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud,
-  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, FileUp, History
+  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, FileUp, History, GripVertical, ArrowUp, ArrowDown
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -854,6 +854,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
   const [baseMap, setBaseMap] = useState<"satellite" | "streets">("satellite");
   const [mapQuery, setMapQuery] = useState("");
   const [plotLabelSaving,setPlotLabelSaving]=useState(false);
+  const [draggedPlotLabel,setDraggedPlotLabel]=useState<PlotLabelField|null>(null);
   const plotLabelFields = (settings.plot_label_fields?.length ? settings.plot_label_fields : DEFAULT_PLOT_LABEL_FIELDS) as PlotLabelField[];
   const recordsRef = useRef(records);
   useEffect(() => { recordsRef.current = records; }, [records]);
@@ -890,15 +891,35 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     return { ...plot, feature, fieldName: relation(plot.fields)?.name ?? fields.find(field => field.id === plot.field_id)?.name ?? "Campo" };
   }).filter(Boolean) as MapPlot[], [displayPlots, fields]);
   const mapPlotLabels = useMemo(() => new globalThis.Map(mapPlots.map(plot => [plot.id, buildPlotMapLabel(plot, records, assignments, campaigns, preferredCampaignId, plotLabelFields)])), [mapPlots, records, assignments, campaigns, preferredCampaignId, plotLabelFields.join("|")]);
-  async function updatePlotLabels(field:PlotLabelField,checked:boolean){
-    const current=plotLabelFields;
-    let next=checked?Array.from(new Set([...current,field])):current.filter(item=>item!==field);
-    if(!next.length)next=DEFAULT_PLOT_LABEL_FIELDS;
-    const nextSettings={...settings,plot_label_fields:next};
+  async function persistPlotLabels(next:PlotLabelField[]){
+    const clean=next.length?next:DEFAULT_PLOT_LABEL_FIELDS;
+    const nextSettings={...settings,plot_label_fields:clean};
     onSettingsChange(nextSettings);setPlotLabelSaving(true);
-    const {error}=await supabase.from("app_settings").upsert({group_id:groupId,user_id:userId,appearance:settings.appearance,area_unit:settings.area_unit,date_format:settings.date_format,notifications_enabled:settings.notifications_enabled,plot_label_fields:next},{onConflict:"group_id,user_id"});
+    const {error}=await supabase.from("app_settings").upsert({group_id:groupId,user_id:userId,appearance:settings.appearance,area_unit:settings.area_unit,date_format:settings.date_format,notifications_enabled:settings.notifications_enabled,plot_label_fields:clean},{onConflict:"group_id,user_id"});
     setPlotLabelSaving(false);
     if(error)console.error("No se pudieron guardar las etiquetas del mapa:",error.message);
+  }
+  async function updatePlotLabels(field:PlotLabelField,checked:boolean){
+    const next=checked?Array.from(new Set([...plotLabelFields,field])):plotLabelFields.filter(item=>item!==field);
+    await persistPlotLabels(next);
+  }
+  async function movePlotLabel(field:PlotLabelField,direction:-1|1){
+    const index=plotLabelFields.indexOf(field);
+    const target=index+direction;
+    if(index<0||target<0||target>=plotLabelFields.length)return;
+    const next=[...plotLabelFields];
+    [next[index],next[target]]=[next[target],next[index]];
+    await persistPlotLabels(next);
+  }
+  async function dropPlotLabel(target:PlotLabelField){
+    const source=draggedPlotLabel;
+    setDraggedPlotLabel(null);
+    if(!source||source===target)return;
+    const next=[...plotLabelFields];
+    const from=next.indexOf(source),to=next.indexOf(target);
+    if(from<0||to<0)return;
+    next.splice(from,1);next.splice(to,0,source);
+    await persistPlotLabels(next);
   }
   const mapSearchResults = useMemo(() => {
     const query = normalizeText(mapQuery.trim());
@@ -1240,7 +1261,7 @@ function RealMapView({ fields, plots, records, campaigns, assignments, cropColor
     {filterPanel === "campaign" && <div className="map-filter-panel campaign-filter-panel"><div><strong>Campaña del mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><select value={campaignFilterId} onChange={event => setCampaignFilterId(event.target.value)}><option value="">Todas las campañas</option>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}{campaign.status === "active" ? " · Activa" : ""}</option>)}</select><small>El filtro actualiza lotes, cultivos y monitoreos.</small></div>}
     {filterPanel === "monitoring" && <div className="map-filter-panel monitoring-filter-panel"><div><strong>Monitoreos en el mapa</strong><button onClick={() => setFilterPanel(null)}><X/></button></div><div className="monitoring-days">{[7,15,30,-1].map(days => <button key={days} className={monitoringDays === days ? "active" : ""} onClick={() => setMonitoringDays(days)}>{days < 0 ? "Todos" : `${days} días`}</button>)}</div><button className="monitoring-hide" onClick={() => setMonitoringDays(null)}><EyeOff/>Ocultar monitoreos</button><small>“Todos” incluye la campaña activa completa. Solo aparecen monitoreos con GPS válido.</small></div>}
     {layerPanelOpen && <div className="layer-switcher premium-layer-switcher compact-layer-switcher"><div className="layer-switcher-title"><div><Layers3/><span>Visualización</span></div><button className="layer-close" onClick={()=>setLayerPanelOpen(false)} aria-label="Cerrar"><X/></button></div><div className="layer-style-options">{(["cultivo", "prioridad", "sin-relleno"] as const).map(value => <button key={value} className={layer === value ? "active" : ""} onClick={() => setLayer(value)}>{value === "sin-relleno" ? "Sin relleno" : cap(value)}</button>)}</div></div>}
-    {labelPanelOpen && <div className="map-label-panel"><header><div><Settings2/><span><strong>Etiquetas del mapa</strong><small>Elegí qué datos aparecen dentro de cada lote.</small></span></div><div>{plotLabelSaving&&<LoaderCircle className="spin"/>}<button onClick={()=>setLabelPanelOpen(false)} aria-label="Cerrar"><X/></button></div></header><div className="map-label-options">{PLOT_LABEL_OPTIONS.map(option=><label key={option.id} className={plotLabelFields.includes(option.id)?"active":""}><input type="checkbox" checked={plotLabelFields.includes(option.id)} onChange={event=>void updatePlotLabels(option.id,event.target.checked)}/><span><strong>{option.label}</strong><small>{option.hint}</small></span><i>{plotLabelFields.includes(option.id)?<Check/>:null}</i></label>)}</div></div>}
+    {labelPanelOpen && <div className="map-label-panel"><header><div><Settings2/><span><strong>Etiquetas del mapa</strong><small>Activá datos y arrastralos para definir qué aparece arriba y qué abajo.</small></span></div><div>{plotLabelSaving&&<LoaderCircle className="spin"/>}<button onClick={()=>setLabelPanelOpen(false)} aria-label="Cerrar"><X/></button></div></header><div className="map-label-order"><div className="map-label-order-title"><span>Orden visible</span><small>Arrastrá para reordenar</small></div>{plotLabelFields.map((field,index)=>{const option=PLOT_LABEL_OPTIONS.find(item=>item.id===field)!;return <div key={field} className={`map-label-order-row${draggedPlotLabel===field?" dragging":""}`} draggable onDragStart={()=>setDraggedPlotLabel(field)} onDragEnd={()=>setDraggedPlotLabel(null)} onDragOver={event=>event.preventDefault()} onDrop={()=>void dropPlotLabel(field)}><span className="map-label-grip" title="Arrastrar"><GripVertical/></span><span className="map-label-order-copy"><strong>{option.label}</strong><small>{index===0?"Se muestra primero":`Posición ${index+1}`}</small></span><span className="map-label-order-actions"><button type="button" onClick={()=>void movePlotLabel(field,-1)} disabled={index===0||plotLabelSaving} aria-label={`Subir ${option.label}`}><ArrowUp/></button><button type="button" onClick={()=>void movePlotLabel(field,1)} disabled={index===plotLabelFields.length-1||plotLabelSaving} aria-label={`Bajar ${option.label}`}><ArrowDown/></button></span></div>})}</div><div className="map-label-options-title"><span>Datos disponibles</span><small>Marcá qué querés ver en el mapa</small></div><div className="map-label-options">{PLOT_LABEL_OPTIONS.map(option=><label key={option.id} className={plotLabelFields.includes(option.id)?"active":""}><input type="checkbox" checked={plotLabelFields.includes(option.id)} onChange={event=>void updatePlotLabels(option.id,event.target.checked)}/><span><strong>{option.label}</strong><small>{option.hint}</small></span><i>{plotLabelFields.includes(option.id)?<Check/>:null}</i></label>)}</div></div>}
     {drawing && <div className="drawing-panel"><span className="eyebrow">NUEVO TRAZADO</span><h3>Marcá los límites del lote</h3><p>Hacé clic sobre el mapa para agregar cada vértice. Necesitás al menos tres puntos.</p><strong>{points.length} punto{points.length === 1 ? "" : "s"}</strong><div><button onClick={() => setPoints(current => current.slice(0, -1))} disabled={!points.length}><Undo2/>Deshacer</button><button onClick={cancelDrawing}><X/>Cancelar</button><button className="finish" disabled={points.length < 3} onClick={finishDrawing}><Check/>Finalizar</button></div></div>}
     {draft && <PlotForm key={`${draft.properties?.imported_name??"drawn"}-${draft.geometry.coordinates[0][0]?.join(",")}`} feature={draft} fields={fields} groupId={groupId} userId={userId} onCancel={()=>{if(importQueue.length)advanceImported();else cancelDrawing();}} onSaved={()=>{if(importQueue.length)advanceImported();else{cancelDrawing();onSaved();}}}/>} 
     {selectedPlot && !drawing && !draft && !satelliteOpen && <RealPlotPanel plot={displayPlots.find(plot => plot.id === selectedPlot.id) ?? selectedPlot} fieldName={relation(selectedPlot.fields)?.name ?? fields.find(f => f.id === selectedPlot.field_id)?.name ?? "Campo"} records={records.filter(row => row.plot_id === selectedPlot.id)} onRecord={setDetailRecord} onNewRecord={() => onCreateRecord(selectedPlot,"")} onMonitoring={() => onCreateRecord(selectedPlot,"monitoring")} onSatellite={() => { setSatellitePlotId(selectedPlot.id); void openSatellite(); }} onClose={() => setSelectedPlot(null)}/>}
