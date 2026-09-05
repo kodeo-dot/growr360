@@ -1373,6 +1373,7 @@ function PlotActivitySection({ title, icon: Icon, rows, onOpen }: { title: strin
 function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => void }) {
   const details = recordData(record);
   const actualType=effectiveRecordType(record);
+  const isMonitoring=actualType==="monitoring";
   const observations=String(details.observations??record.observations??"").trim();
   const entries=visibleDetails(details).filter(([key])=>key!=="observations"&&!/^input_\d+_/.test(key)&&key!=="input_count"&&!['crop_source_record_id','crop_source'].includes(key));
   const inputs=recordInputDetails(details,number(record.worked_area));
@@ -1387,37 +1388,33 @@ function RecordDetail({ record, onClose }: { record: RecordRow; onClose: () => v
   const plotName=relation(record.plots)?.name || "Lote sin informar";
   const campaignName=relation(record.campaigns)?.name || "Sin campaña";
   const area=number(record.worked_area);
-  return <div className="record-detail-backdrop"><article className={`record-detail-sheet record-detail-v3 record-detail-v4 ${actualType==="monitoring"?"monitoring-detail-v3":""}`}>
-    <header className="record-detail-v3-head">
-      <button className="record-detail-back" onClick={onClose}><ChevronLeft/>Volver</button>
-      <div className="record-detail-identity">
-        <span className={`record-detail-type type-${actualType}`}><RecordTypeIcon type={actualType}/>{recordType(actualType)}</span>
-        <h2>{fieldName} <span>·</span> {plotName}</h2>
-        <p><CalendarDays/>{formatDate(record.record_date)}<span>•</span>{campaignName}</p>
+  return <div className="record-detail-backdrop"><article className={`record-detail-sheet record-detail-otlike ${isMonitoring?"monitoring-detail-otlike":""}`}>
+    <header className="record-detail-otlike-head"><div><span className="eyebrow">{isMonitoring?"MONITOREO":"REGISTRO"}</span><h2>{fieldName} · {plotName}</h2></div><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></header>
+
+    <div className="record-detail-otlike-body">
+      <div className={`record-detail-hero type-${actualType}`}><div><span className="record-detail-status"><RecordTypeIcon type={actualType}/>{recordType(actualType)}</span><h3>{crop||"Sin cultivo informado"}</h3><p>{isMonitoring?"Lectura y condición observada en el lote.":"Información registrada de la labor realizada."}</p></div><div className="record-detail-hero-date"><small>FECHA</small><strong>{formatDate(record.record_date)}</strong></div></div>
+
+      <div className="record-detail-ot-facts">
+        <article><MapPin/><small>Campo</small><strong>{fieldName}</strong></article>
+        <article><Grid2X2/><small>Lote</small><strong>{plotName}</strong></article>
+        <article><Sprout/><small>Campaña</small><strong>{campaignName}</strong></article>
+        {actualType!=="napa"&&<article><Grid2X2/><small>Superficie</small><strong>{area>0?`${area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"No informada"}</strong></article>}
       </div>
-      <div className="record-detail-crop-hero"><small>{actualType==="monitoring"?"CULTIVO OBSERVADO":"CULTIVO"}</small><strong>{crop||"Sin cultivo informado"}</strong></div>
-    </header>
 
-    <section className="record-detail-facts">
-      <RecordFact icon={CalendarDays} label="Fecha" value={formatDate(record.record_date)}/>
-      <RecordFact icon={MapPin} label="Ubicación" value={`${fieldName} · ${plotName}`}/>
-      <RecordFact icon={Sprout} label="Campaña" value={campaignName}/>
-      {actualType!=="napa"&&<RecordFact icon={Grid2X2} label="Superficie" value={area>0?`${area.toLocaleString("es-AR",{maximumFractionDigits:2})} ha`:"No informada"}/>} 
-    </section>
+      {(record.contractor||record.machinery_text)&&<section className="record-ot-section"><div className="record-ot-section-title"><Tractor/><div><h3>Ejecución</h3><p>Responsables y maquinaria</p></div></div><div className="record-ot-values">{record.contractor&&<DataTile label="Contratista / responsable" value={record.contractor}/>} {record.machinery_text&&<DataTile label="Maquinaria" value={record.machinery_text}/>}</div></section>}
 
-    {(record.contractor||record.machinery_text)&&<section className="record-detail-execution"><div className="record-detail-section-heading"><Tractor/><div><span>EJECUCIÓN</span><h3>Quién y con qué se realizó</h3></div></div><div className="record-detail-data-grid">{record.contractor&&<DataTile label="Contratista / responsable" value={record.contractor}/>} {record.machinery_text&&<DataTile label="Maquinaria" value={record.machinery_text}/>}</div></section>}
+      {isMonitoring&&<section className="record-ot-section monitoring-ot-section"><div className="record-ot-section-title"><Activity/><div><h3>Estado del monitoreo</h3><p>Condición sanitaria y observaciones de campo</p></div></div><MonitoringHealthBlock details={details} entries={monitoring}/></section>}
 
-    {actualType==="monitoring"&&<MonitoringHealthBlock details={details} entries={monitoring}/>} 
+      {inputs.length>0&&<section className="record-ot-section"><div className="record-ot-section-title"><Leaf/><div><h3>Insumos y dosis</h3><p>Productos utilizados en esta labor</p></div></div><div className="record-ot-input-list">{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <article key={input.index}><div className="record-ot-input-name"><small>INSUMO</small><strong>{input.name||`Insumo ${input.index+1}`}</strong></div><div className="record-ot-input-measure"><small>DOSIS</small><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})} <span>{rateUnit}</span></strong></div><div className="record-ot-input-measure total"><small>TOTAL</small><strong>{perHa?input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2}):"—"} <span>{perHa?totalUnit:"Según base tratada"}</span></strong></div></article>})}</div></section>}
 
-    {inputs.length>0&&<section className="record-detail-section record-detail-inputs-v3"><div className="record-detail-section-heading"><Leaf/><div><span>INSUMOS</span><h3>Productos y dosis aplicadas</h3></div></div><div className="record-inputs-v3-list">{inputs.map(input=>{const rateUnit=input.unit.includes("/")?input.unit:`${input.unit||"u"}/ha`;const perHa=/\/ha$/i.test(rateUnit);const totalUnit=rateUnit.replace(/\/ha$/i,"");return <article key={input.index}><div className="input-product"><small>INSUMO</small><strong>{input.name||`Insumo ${input.index+1}`}</strong></div><div className="input-dose"><small>DOSIS</small><div className="input-measure"><strong>{input.dose.toLocaleString("es-AR",{maximumFractionDigits:3})}</strong><span>{rateUnit}</span></div></div><div className="input-total"><small>TOTAL</small><div className="input-measure"><strong>{perHa?input.quantity.toLocaleString("es-AR",{maximumFractionDigits:2}):"—"}</strong><span>{perHa?totalUnit:"Según base tratada"}</span></div></div></article>})}</div></section>}
-
-    {technical.length>0&&<RecordDetailPanel title="Datos de la labor" eyebrow="DATOS TÉCNICOS" icon={SlidersHorizontal} entries={technical}/>} 
-    {samples.length>0&&<RecordDetailPanel title="Resultados de muestras" eyebrow="MUESTRAS DE SUELO" icon={MapPin} entries={samples}/>} 
-    {costs.length>0&&<RecordDetailPanel title="Costos y valores" eyebrow="ECONOMÍA" icon={CreditCard} entries={costs} emphasis/>} 
-    {gps.length>0&&<RecordDetailPanel title="Ubicación registrada" eyebrow="GPS" icon={LocateFixed} entries={gps}/>} 
-    {observations&&<section className="record-detail-section record-observations-v3"><div className="record-detail-section-heading"><FileText/><div><span>OBSERVACIONES</span><h3>Notas del registro</h3></div></div><p>{observations}</p></section>} 
-    {!inputs.length&&!monitoring.length&&!technical.length&&!samples.length&&!costs.length&&!gps.length&&!observations&&<section className="record-detail-section"><EmptyLine text="Este registro no tiene datos adicionales."/></section>}
-    <section className="record-detail-section record-attachments-v3"><RecordAttachments recordId={record.id}/></section>
+      {technical.length>0&&<RecordDetailPanel title="Datos de la labor" eyebrow="DATOS TÉCNICOS" icon={SlidersHorizontal} entries={technical}/>} 
+      {samples.length>0&&<RecordDetailPanel title="Resultados de muestras" eyebrow="MUESTRAS DE SUELO" icon={MapPin} entries={samples}/>} 
+      {costs.length>0&&<RecordDetailPanel title="Costos y valores" eyebrow="ECONOMÍA" icon={CreditCard} entries={costs} emphasis/>} 
+      {gps.length>0&&<RecordDetailPanel title="Ubicación registrada" eyebrow="GPS" icon={LocateFixed} entries={gps}/>} 
+      {observations&&<section className="record-ot-section record-ot-notes"><div className="record-ot-section-title"><FileText/><div><h3>Observaciones</h3><p>Notas del registro</p></div></div><p>{observations}</p></section>} 
+      {!inputs.length&&!monitoring.length&&!technical.length&&!samples.length&&!costs.length&&!gps.length&&!observations&&<section className="record-ot-section"><EmptyLine text="Este registro no tiene datos adicionales."/></section>}
+      <section className="record-ot-section record-ot-attachments"><RecordAttachments recordId={record.id}/></section>
+    </div>
   </article></div>;
 }
 
