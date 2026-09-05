@@ -1519,9 +1519,9 @@ function RealRecordsView({ records, canCreate, onCreate, mode = "records" }: { r
   const monitoring = mode === "monitoring";
   const baseRows=records.filter(row => monitoring ? effectiveRecordType(row) === "monitoring" : !["napa", "monitoring"].includes(effectiveRecordType(row)));
   const recordTypes=Array.from(new Set(baseRows.map(row=>effectiveRecordType(row)))).sort((a,b)=>recordType(a).localeCompare(recordType(b),"es"));
-  const campaigns=Array.from(new Map(baseRows.map(row=>{const item=relation(row.campaigns);return item?.name?[String(row.campaign_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
-  const fields=Array.from(new Map(baseRows.map(row=>{const item=relation(row.fields);return item?.name?[String(row.field_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
-  const plots=Array.from(new Map(baseRows.filter(row=>fieldFilter==="all"||String(row.field_id||relation(row.fields)?.name)===fieldFilter).map(row=>{const item=relation(row.plots);return item?.name?[String(row.plot_id||item.name),item.name] as const:null}).filter(Boolean) as [string,string][]).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const campaigns=Array.from(new globalThis.Map<string,string>(baseRows.map(row=>{const item=relation(row.campaigns);return item?.name?[String(row.campaign_id||item.name),item.name] as [string,string]:null}).filter((item): item is [string,string] => item !== null)).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const fields=Array.from(new globalThis.Map<string,string>(baseRows.map(row=>{const item=relation(row.fields);return item?.name?[String(row.field_id||item.name),item.name] as [string,string]:null}).filter((item): item is [string,string] => item !== null)).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
+  const plots=Array.from(new globalThis.Map<string,string>(baseRows.filter(row=>fieldFilter==="all"||String(row.field_id||relation(row.fields)?.name)===fieldFilter).map(row=>{const item=relation(row.plots);return item?.name?[String(row.plot_id||item.name),item.name] as [string,string]:null}).filter((item): item is [string,string] => item !== null)).entries()).sort((a,b)=>a[1].localeCompare(b[1],"es"));
   const crops=Array.from(new Set(baseRows.map(recordCrop).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"es"));
   const normalizedQuery=query.trim().toLowerCase();
   const visible = baseRows.filter(row => {
