@@ -1892,3 +1892,23 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
   .group-v52-steps i{width:48px!important}
   .group-v52-step-copy h3{font-size:25px!important}
 }
+
+/* v56 · OT insumos compactos y plegables */
+.work-order-products-step{gap:18px!important}
+.work-order-products{display:grid;gap:12px}
+.work-order-products>header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 2px 10px;border-bottom:1px solid var(--line)}
+.work-order-products>header>div{display:grid;gap:2px}.work-order-products>header strong{font-size:15px}.work-order-products>header small{font-size:12px;color:var(--muted)}
+.work-order-products>header>button,.work-order-add-product-bottom{min-height:42px;padding:0 17px;border:1px solid #91c9a8;border-radius:999px;background:#f4fbf6;color:var(--green);font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}
+.work-order-products>header>button svg,.work-order-add-product-bottom svg{width:16px;height:16px}
+.work-order-product-editor{border:1px solid var(--line)!important;border-radius:18px!important;background:#fff!important;padding:0!important;overflow:hidden;box-shadow:none!important}
+.work-order-product-editor>header{display:grid;grid-template-columns:minmax(0,1fr) 40px;align-items:center;gap:5px;padding:7px 8px 7px 14px;border:0!important;background:#fff!important}
+.work-order-product-toggle{min-width:0;border:0!important;background:transparent!important;padding:6px 0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;text-align:left!important;color:var(--ink)!important;width:100%!important;height:auto!important}
+.work-order-product-toggle>span{min-width:0;display:grid;gap:2px}.work-order-product-toggle strong{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.work-order-product-toggle small{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.work-order-product-toggle>svg{width:17px;height:17px;color:var(--muted);transition:transform .18s ease;flex:0 0 auto}.work-order-product-editor:not(.is-collapsed) .work-order-product-toggle>svg{transform:rotate(180deg)}
+.work-order-product-remove{width:34px!important;height:34px!important;border:0!important;border-radius:999px!important;background:#fff!important;color:#9d4d45!important;display:grid!important;place-items:center!important;padding:0!important}.work-order-product-remove:hover{background:#fbf1ef!important}.work-order-product-remove svg{width:15px;height:15px}
+.work-order-product-fields{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;padding:14px 16px 16px;border-top:1px solid var(--line)}
+.work-order-product-fields>.form-pair{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px}.work-order-product-fields label{gap:6px!important}.work-order-product-fields input,.work-order-product-fields select{min-height:42px!important}
+.work-order-product-total{grid-column:1/-1;display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:11px 13px!important;border-radius:12px!important;background:#f4f8f5!important}.work-order-product-total small{font-size:10px!important}.work-order-product-total strong{font-size:14px!important}
+.work-order-products-empty{min-height:150px;border:1px dashed #b8c9bf;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:5px;color:var(--muted)}.work-order-products-empty svg{width:24px}.work-order-products-empty strong{color:var(--ink);font-size:14px}.work-order-products-empty small{font-size:12px}
+.work-order-products-actions{position:sticky;bottom:0;z-index:6;display:grid;grid-template-columns:auto minmax(150px,.55fr) minmax(160px,.65fr);gap:9px;padding:12px 0 2px;background:linear-gradient(to bottom,rgba(251,253,251,0),#fbfdfb 22%)}
+.work-order-products-actions>button{min-height:48px;border-radius:999px!important}.work-order-products-actions .secondary-action{padding-inline:20px}.work-order-products-actions .primary-action{display:flex;align-items:center;justify-content:center;gap:6px}
+@media(max-width:700px){.work-order-products>header{align-items:flex-start}.work-order-products>header>button{padding:0 13px}.work-order-product-fields{grid-template-columns:1fr}.work-order-product-fields>.form-pair{grid-template-columns:1fr 1fr}.work-order-products-actions{grid-template-columns:1fr 1fr}.work-order-products-actions .secondary-action{grid-column:1/-1;order:3}.work-order-add-product-bottom{padding-inline:10px}}
