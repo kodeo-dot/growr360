@@ -241,3 +241,97 @@
 @media (prefers-reduced-motion: reduce){
   .gr-module-card, .gr-btn, .gr-nav-mobile{transition:none}
 }
+
+/* ============================================================
+   v53 — Inicio agronómico sobrio
+   Cero sombras decorativas. Geometría franca: rectas o círculos/pills.
+   Mantiene los fondos pastel de las capturas de producto.
+   ============================================================ */
+.gr-landing{
+  --gr-ink:#17352a;
+  --gr-muted:#5d7067;
+  --gr-green:#1f6f46;
+  --gr-green-dark:#185b39;
+  --gr-line:#d8e1db;
+  --gr-card:#fff;
+  --gr-shadow:none;
+  background:#f8faf7;
+}
+
+/* navegación más institucional */
+.gr-nav{background:#f8faf7f5;backdrop-filter:blur(8px);border-bottom:1px solid #d6dfd9;box-shadow:none}
+.gr-nav-inner{min-height:68px}
+.gr-nav-toggle{border-radius:999px;box-shadow:none;background:#fff}
+.gr-btn{border-radius:999px;box-shadow:none!important;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.gr-btn:hover,.gr-btn:active{transform:none}
+.gr-btn-lg{border-radius:999px}
+
+/* hero: más campo / menos SaaS */
+.gr-hero{padding-top:72px;padding-bottom:76px;background:#edf4ed;border-bottom:1px solid #d7e2da}
+.gr-hero-copy h1{max-width:680px;font-weight:680;letter-spacing:-.045em}
+.gr-hero-copy>p{max-width:570px;color:#50675d}
+.gr-hero-media{border-radius:0;box-shadow:none;border:1px solid #cfd9d2;background:#dfe9e1}
+.gr-hero-tag{left:18px;bottom:18px;border-radius:999px;background:#f8faf7f2;border:1px solid #d6e0da;backdrop-filter:blur(8px);padding:10px 15px;display:flex;align-items:center;gap:7px}
+.gr-hero-tag strong,.gr-hero-tag span{font-size:11px}
+.gr-hero-tag span:before{content:"·";margin-right:7px;color:#809087}
+.gr-hero-points li svg{border-radius:50%}
+
+/* módulos como una lectura técnica, no cards flotantes */
+.gr-modules{padding-top:82px;padding-bottom:88px;background:#f4f1e6;border-bottom:1px solid #e4dfcf}
+.gr-module-grid{gap:0;border-top:1px solid #d7ddd5;border-bottom:1px solid #d7ddd5}
+.gr-module-card{min-height:210px;padding:28px 24px;border:0;border-right:1px solid #d7ddd5;border-radius:0;background:transparent;box-shadow:none;transition:none}
+.gr-module-card:last-child{border-right:0}
+.gr-module-card:hover{transform:none;box-shadow:none;background:#ffffff75}
+.gr-module-icon{width:52px;height:52px;border-radius:50%;margin-bottom:22px}
+.gr-module-card strong{font-size:17px;letter-spacing:-.01em}
+.gr-module-card p{max-width:230px;font-size:13px;line-height:1.6}
+
+/* capturas: conservar pastel, pero sin look de tarjeta con sombra */
+.gr-stories{padding-top:42px;padding-bottom:78px;background:#f8faf7;gap:28px}
+.gr-story{border-radius:0;border:1px solid #bfd1bd;background:#dcebd3}
+.gr-story.gr-story-reverse{background:#dbeaf0;border-color:#c3d7df}
+.product-browser{border:1px solid #9bad9f;border-radius:0;box-shadow:none;background:#fff}
+.product-browser>header{height:34px;border-bottom:1px solid #cbd5cf;background:#f4f6f4}
+.product-browser>header span{width:8px;height:8px;border-radius:50%;background:#75897d}
+
+/* sección de valor tipo bloque editorial */
+.gr-values{padding-top:86px;padding-bottom:86px;background:#203e31}
+.gr-value-grid{gap:0;border-top:1px solid #ffffff2b;border-bottom:1px solid #ffffff2b}
+.gr-value-grid article{min-height:220px;padding:30px 26px;border:0;border-right:1px solid #ffffff2b;border-radius:0;background:transparent}
+.gr-value-grid article:last-child{border-right:0}
+.gr-value-grid svg{width:30px;height:30px}
+
+/* nosotros: fotografía directa, sin caja flotante */
+.gr-about{margin-top:96px;margin-bottom:96px}
+.gr-about-media{border-radius:0;border:1px solid #d2ddd5;background:#e4ebe6}
+.gr-about-media span{border-radius:999px;border:1px solid #d6dfd9;box-shadow:none}
+
+/* legal: enlaces como filas, no cards redondeadas */
+.gr-legal-links{padding-top:76px;padding-bottom:76px;background:#f2ead9;border-top:1px solid #e3d8c1;border-bottom:1px solid #e3d8c1}
+.gr-legal-grid{gap:0;border-top:1px solid #d9cdb5;border-bottom:1px solid #d9cdb5}
+.gr-legal-grid a{min-height:98px;padding:20px 14px;border:0;border-right:1px solid #d9cdb5;border-radius:0;background:transparent;box-shadow:none;transition:background .15s ease}
+.gr-legal-grid a:last-child{border-right:0}
+.gr-legal-grid a:hover{border-color:transparent;box-shadow:none;background:#fff8}
+
+/* CTA final integrado al sitio, no otra tarjeta */
+.gr-final{width:100%;margin:0;padding:74px max(20px,calc((100% - var(--gr-container))/2));border-radius:0;background:#c5dfce;border-bottom:1px solid #abcab6}
+
+/* footer nuevo: claro, técnico, sobrio */
+.gr-footer{padding:54px 20px 24px;background:#eef3ee;color:#284238;border-top:1px solid #cfdad2}
+.gr-footer-grid{gap:42px}
+.gr-footer-brand .brand strong{color:#17372a}
+.gr-footer-brand .brand strong span{color:#1f6f46}
+.gr-footer-brand .brand small,.gr-footer-brand p,.gr-footer-brand span,.gr-footer-brand a,.gr-footer-links a,.gr-footer-downloads>p{color:#64766d}
+.gr-footer-links strong,.gr-footer-downloads strong{color:#203d31}
+.gr-footer-links a:hover{color:#1f6f46}
+.gr-store-badge,.gr-web-badge{border:1px solid #c9d5cd;background:#fff;color:#244237;border-radius:999px;box-shadow:none}
+.gr-store-badge small,.gr-web-badge small{color:#75867c}
+.gr-web-badge svg{color:#1f6f46}
+.gr-footer-bottom{border-top:1px solid #d2dcd5;color:#7c8c83}
+
+@media (max-width:899px){
+  .gr-module-grid,.gr-value-grid,.gr-legal-grid{border:0}
+  .gr-module-card,.gr-value-grid article,.gr-legal-grid a{border-right:0;border-bottom:1px solid #d7ddd5}
+  .gr-value-grid article{border-bottom-color:#ffffff2b}
+  .gr-legal-grid a{border-bottom-color:#d9cdb5}
+}

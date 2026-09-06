@@ -1,0 +1,9 @@
+Growr360 v53 — Rediseño de Inicio + Registro
+
+- Inicio rediseñado con lenguaje visual agronómico y editorial.
+- Eliminadas sombras decorativas de landing.
+- Geometría: recta o completamente redondeada (pills/círculos), sin radios intermedios en tarjetas.
+- Se mantienen los fondos pastel de las secciones con capturas de producto.
+- Módulos, beneficios y legales pasan de "cards SaaS" a bloques técnicos separados por líneas.
+- Footer rediseñado en fondo claro, más institucional y menos pesado.
+- Registro: campos claros/blancos, sin fondos oscuros, sin sombras y con bordes sobrios.
