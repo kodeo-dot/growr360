@@ -1,0 +1,9 @@
+Growr360 v63
+
+1. Ejecutar OT_PERMISSIONS_FIX_V63.sql en Supabase SQL Editor.
+2. Publicar esta versión.
+
+Correcciones:
+- member_permission_overrides usa group_member_id, no group_id/user_id.
+- delete_work_order valida permisos a través del group_members.id correcto.
+- Guardar permisos personalizados desde Equipo usa un RPC seguro adaptado al esquema real.
