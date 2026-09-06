@@ -1,0 +1,8 @@
+Growr360 v68
+
+- Rediseño completo de los PDFs exportados de Registros y Monitoreos.
+- Encabezado institucional Growr360, jerarquía visual, bloques de datos, secciones y pie de página.
+- Exportación múltiple mantiene PDFs reales dentro del ZIP.
+- Etiquetas, estados, tipos, prioridades y valores internos traducidos al español.
+- Se ocultan claves técnicas internas (record_kind, source_*, IDs, etc.) para que el PDF sea legible.
+- Insumos y dosis se presentan como sección propia.
