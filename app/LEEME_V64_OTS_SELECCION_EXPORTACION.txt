@@ -1,0 +1,12 @@
+Growr360 v64 · Órdenes de trabajo
+
+- Nuevo listado operativo en formato tabla, más limpio y legible.
+- Selección individual o selección de todas las OTs visibles según filtros.
+- Barra de acciones múltiples fija al seleccionar.
+- Eliminación múltiple usando el RPC delete_work_order; solo elimina OTs para las que el usuario tiene permiso.
+- Exportación múltiple en ZIP desde el navegador, sin backend adicional.
+- El ZIP contiene resumen.csv y una carpeta /ordenes con un documento HTML imprimible por OT.
+- Los HTML conservan los datos principales, lotes, insumos/dosis/totales, indicaciones y notas.
+- Las dosis mantienen 2 decimales; los totales mantienen la normalización cc→lt y gr→kg.
+
+No requiere una nueva migración SQL respecto de v63.
