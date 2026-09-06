@@ -296,7 +296,13 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     if (!/^[a-z0-9._-]{3,30}$/.test(value)) { setUsernameAvailability("invalid"); return; }
     setUsernameAvailability("checking");
     const timer = window.setTimeout(async () => {
-      const { data, error } = await client.rpc("check_signup_availability", { p_username: value, p_email: null });
+      const check = async () => client.rpc("check_signup_availability", { p_username: value, p_email: null });
+      let { data, error } = await check();
+      // A session/token refresh can briefly race PostgREST on tab changes. Retry once before showing an error.
+      if (error) {
+        await new Promise(resolve => window.setTimeout(resolve, 450));
+        ({ data, error } = await check());
+      }
       if (error) { setUsernameAvailability("error"); return; }
       const row = Array.isArray(data) ? data[0] : data;
       setUsernameAvailability(row?.username_available === true ? "available" : "taken");
@@ -311,7 +317,12 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setEmailAvailability("invalid"); return; }
     setEmailAvailability("checking");
     const timer = window.setTimeout(async () => {
-      const { data, error } = await client.rpc("check_signup_availability", { p_username: null, p_email: value });
+      const check = async () => client.rpc("check_signup_availability", { p_username: null, p_email: value });
+      let { data, error } = await check();
+      if (error) {
+        await new Promise(resolve => window.setTimeout(resolve, 450));
+        ({ data, error } = await check());
+      }
       if (error) { setEmailAvailability("error"); return; }
       const row = Array.isArray(data) ? data[0] : data;
       setEmailAvailability(row?.email_available === true ? "available" : "taken");
@@ -424,7 +435,7 @@ function AvailabilityMessage({ type, status }: { type: "username" | "email"; sta
   if (status === "available") return <p className="availability-message available"><Check/>Este {label} está disponible.</p>;
   if (status === "taken") return <p className="availability-message unavailable"><X/>Este {label} ya está en uso.</p>;
   if (status === "invalid") return <p className="availability-message unavailable"><X/>{type === "username" ? "Usá entre 3 y 30 caracteres válidos." : "Ingresá un correo válido."}</p>;
-  return <p className="availability-message unavailable"><X/>No pudimos comprobarlo. Intentá nuevamente.</p>;
+  return <p className="availability-message unavailable"><X/>No pudimos verificarlo en este momento. Volvé a intentar en unos segundos.</p>;
 }
 
 function PublicLanding({ onLogin, onRegister, onLegal }: { onLogin: () => void; onRegister: () => void; onLegal: (page:"terms"|"privacy"|"faq") => void }) {

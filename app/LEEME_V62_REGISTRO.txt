@@ -1,0 +1,8 @@
+Growr360 v62 - verificacion de registro
+
+1. Ejecutar AUTH_AVAILABILITY_V62.sql en Supabase > SQL Editor.
+2. Publicar esta version.
+3. Probar Crear cuenta > Nombre de usuario.
+
+El SQL recrea la RPC check_signup_availability, vuelve a otorgar permisos anon/authenticated y fuerza a PostgREST a recargar el schema cache.
+El frontend reintenta una vez una verificacion que falle de manera transitoria.
