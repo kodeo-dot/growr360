@@ -1553,3 +1553,10 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
 .register-grid{gap:8px 10px!important}.register-card .auth-copy{padding-bottom:3px!important}.register-card .google-auth-button{min-height:42px!important}.register-card .auth-divider{margin:1px 0!important}.terms-check{font-size:9.5px!important;color:#748078!important}.owner-note{padding:8px 10px!important;border:1px solid #e7ece8!important;background:#f8faf8!important;border-radius:8px!important;font-size:9.5px!important;color:#607067!important}.owner-note svg{width:16px!important}.invite-auth-banner{border-radius:8px!important;padding:8px 10px!important}
 @media(max-width:980px){.auth-layout{grid-template-columns:1fr!important}.auth-showcase-real{display:none!important}.auth-card-v2,.register-card{width:min(500px,calc(100% - 40px))!important;padding:82px 0 42px!important}.register-card{width:min(570px,calc(100% - 40px))!important}}
 @media(max-width:560px){.auth-card-v2,.register-card{width:calc(100% - 32px)!important;padding-top:74px!important}.auth-card-v2>.brand{margin-bottom:24px!important}.auth-copy h1,.register-card .auth-copy h1{font-size:29px!important}.register-grid{grid-template-columns:1fr!important}.auth-mode-tabs{margin-top:4px!important}}
+
+/* v47 — auth visual field: keep the real NDVI lot complete and centered */
+.auth-showcase-real{overflow:hidden!important}
+.auth-real-map{width:100%!important;height:100%!important;margin:0!important;position:absolute!important;inset:0!important;overflow:hidden!important;pointer-events:none!important}
+.auth-real-field{position:absolute!important;inset:50% auto auto 50%!important;width:min(78%,680px)!important;height:min(62vh,610px)!important;transform:translate(-50%,-57%)!important;object-fit:contain!important;object-position:center!important;filter:drop-shadow(0 24px 36px rgba(29,67,45,.12)) saturate(.96)!important;opacity:.98!important}
+.auth-showcase-copy{left:clamp(34px,4vw,58px)!important;right:clamp(34px,4vw,58px)!important;bottom:42px!important}
+@media(max-width:1200px){.auth-real-field{width:84%!important;height:57vh!important;transform:translate(-50%,-61%)!important}}
