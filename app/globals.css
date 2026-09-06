@@ -1712,3 +1712,44 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
   .register-grid{grid-template-columns:1fr!important}
   .auth-page-v2 .auth-back{top:14px!important;left:14px!important}
 }
+
+/* v49 — auth compacto + registro por pasos */
+.auth-layout{padding:58px 24px 28px!important;align-items:center!important}
+.auth-card-v2,.register-card{width:min(520px,100%)!important;padding:28px 34px!important;gap:12px!important;border-radius:16px!important;box-shadow:0 14px 42px rgba(24,58,41,.07)!important}
+.auth-card-v2>.brand,.register-card>.brand{display:flex!important;margin:0 0 2px!important}
+.auth-card-v2>.brand strong,.register-card>.brand strong{font-size:21px!important}
+.auth-card-v2>.brand small,.register-card>.brand small{font-size:11px!important}
+.auth-mode-tabs{margin:0!important;padding:3px!important;border-radius:10px!important}
+.auth-mode-tabs button{min-height:34px!important;font-size:12px!important;border-radius:7px!important}
+.auth-copy{padding:1px 0!important}
+.auth-copy h1,.register-card .auth-copy h1{font-size:30px!important;line-height:1.08!important;margin:0 0 6px!important}
+.auth-copy p{font-size:13px!important;line-height:1.4!important;margin:0!important}
+.google-auth-button,.register-card .google-auth-button{min-height:44px!important;border-radius:9px!important;font-size:12.5px!important}
+.auth-divider{font-size:9.5px!important;gap:9px!important}
+.auth-card-v2>label,.register-step-fields>label{font-size:11.5px!important;gap:5px!important}
+.auth-card-v2>label input,.register-step-fields input{min-height:44px!important;border-radius:9px!important;font-size:13px!important;padding:0 12px!important}
+.password-input button{height:34px!important;width:34px!important;top:5px!important;right:5px!important}
+.auth-submit{min-height:44px!important;border-radius:9px!important;font-size:12.5px!important}
+.auth-switch{font-size:11.5px!important;margin:0!important}
+.register-wizard{gap:11px!important}
+.register-copy{padding-bottom:0!important}
+.register-progress{display:grid;gap:7px;padding-top:1px}
+.register-progress-top{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10.5px;color:#859189}
+.register-progress-top strong{color:#1d6f48;font-size:10.5px}
+.register-progress-bar{height:3px;border-radius:999px;background:#e8eeea;overflow:hidden}
+.register-progress-bar i{display:block;height:100%;border-radius:inherit;background:#1a794b;transition:width .22s ease}
+.register-step{min-height:112px;display:flex;align-items:center;animation:registerStepIn .18s ease}
+@keyframes registerStepIn{from{opacity:.35;transform:translateX(5px)}to{opacity:1;transform:none}}
+.register-step-fields{width:100%;display:grid;gap:9px}
+.register-step-fields>label{display:grid;color:#485a50;font-weight:800}
+.register-fullname{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.register-step-help{margin:0;font-size:10.5px;line-height:1.4;color:#839087}
+.register-step-fields .terms-check{display:flex!important;align-items:flex-start!important;gap:8px!important;font-size:10.5px!important;line-height:1.35!important;font-weight:500!important;color:#738078!important}
+.register-step-fields .terms-check input{min-height:auto!important;width:15px!important;height:15px!important;flex:0 0 15px!important;margin-top:1px!important;padding:0!important}
+.register-wizard-actions{display:flex;gap:8px}
+.register-wizard-actions .auth-submit{flex:1}
+.register-prev{min-height:44px;padding:0 13px;border:1px solid #dfe6e1;border-radius:9px;background:#fff;color:#617067;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:800}
+.register-prev svg{width:15px}
+.register-wizard .invite-auth-banner{padding:8px 10px!important;font-size:10.5px!important}
+@media(max-height:760px) and (min-width:701px){.auth-layout{padding-top:42px!important;padding-bottom:18px!important}.auth-card-v2,.register-card{padding:22px 30px!important;gap:9px!important}.auth-copy h1,.register-card .auth-copy h1{font-size:27px!important}.register-step{min-height:96px}.google-auth-button,.register-card .google-auth-button,.auth-submit,.register-prev{min-height:41px!important}.auth-card-v2>label input,.register-step-fields input{min-height:41px!important}}
+@media(max-width:700px){.auth-layout{padding:58px 14px 18px!important;align-items:flex-start!important}.auth-card-v2,.register-card{padding:22px 18px!important;border-radius:14px!important}.auth-copy h1,.register-card .auth-copy h1{font-size:28px!important}.register-fullname{grid-template-columns:1fr!important}.register-step{min-height:145px}.auth-page-v2 .auth-back{top:10px!important;left:10px!important}}

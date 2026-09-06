@@ -275,6 +275,7 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
   const [message, setMessage] = useState("");
   const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
   const [invitationLoading, setInvitationLoading] = useState(Boolean(inviteToken));
+  const [registerStep, setRegisterStep] = useState(1);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -303,6 +304,20 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       options:{ redirectTo, queryParams:{ prompt:"select_account" } }
     });
     if(error){setMessage(`No pudimos iniciar con Google: ${error.message}`);setBusy(false);}
+  }
+
+  function registerNext() {
+    setMessage("");
+    if (registerStep === 1) {
+      if (!firstName.trim() || !lastName.trim()) return setMessage("Ingresá tu nombre completo.");
+    }
+    if (registerStep === 2) {
+      if (!/^[A-Za-z0-9._-]{3,30}$/.test(username.trim())) return setMessage("El usuario debe tener entre 3 y 30 caracteres y no incluir espacios.");
+    }
+    if (registerStep === 3) {
+      if (!email.trim()) return setMessage("Ingresá tu correo electrónico.");
+    }
+    setRegisterStep(step => Math.min(4, step + 1));
   }
 
   async function register(event: FormEvent) {
@@ -343,27 +358,23 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       {message && <p className={message.startsWith("Cuenta creada") ? "form-success" : "form-error"}>{message}</p>}
       <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <CircleUserRound/>}{busy ? "Ingresando…" : "Ingresar a Growr360"}</button>
       <p className="auth-switch">¿Todavía no tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("register"); }}>Crear cuenta</button></p>
-    </form> : <form className="auth-card auth-card-v2 register-card" onSubmit={register}>
+    </form> : <form className="auth-card auth-card-v2 register-card register-wizard" onSubmit={register}>
       <Brand/>
       <div className="auth-mode-tabs"><button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button><button type="button" className="active">Crear cuenta</button></div>
-      <div className="auth-copy"><span>{invitation ? "INVITACIÓN AL EQUIPO" : "NUEVA CUENTA"}</span><h1>{invitation ? `Sumate a ${invitation.group_name}.` : "Empezá a gestionar mejor."}</h1><p>{invitation ? `Tu invitación ya incluye el rol ${roleName(invitation.role)} dentro de ${invitation.group_name}. Solo completá tus datos y creá una contraseña.` : "Creá tu cuenta personal. Tu rol y permisos se definirán después, dentro de cada grupo de trabajo."}</p></div>
+      <div className="auth-copy register-copy"><h1>{invitation ? `Sumate a ${invitation.group_name}.` : "Creá tu cuenta"}</h1><p>{invitation ? `Tu rol dentro de ${invitation.group_name} ya está definido por la invitación.` : "Te va a llevar menos de un minuto."}</p></div>
       {invitationLoading && <div className="invite-auth-banner"><LoaderCircle className="spin"/><span>Validando invitación…</span></div>}
       {invitation && <div className="invite-auth-banner"><Mail/><span><strong>{invitation.email}</strong><small>{invitation.group_name} · {roleName(invitation.role)}</small></span><Check/></div>}
-      {invitation && inviteToken && <div className="invite-app-choice"><a className="open-in-app" href={`growr360://invite?invite=${encodeURIComponent(inviteToken)}`}><Smartphone/><span><strong>Abrir en la app Growr360</strong><small>Recomendado si ya la tenés instalada</small></span><ArrowRight/></a><div><span/>o continuá desde la web<span/></div></div>}
-      <button className="google-auth-button" type="button" disabled={busy||invitationLoading} onClick={()=>void googleAuth()}><GoogleMark/><span>{invitation?"Aceptar invitación con Google":"Registrarme con Google"}</span></button>
-      <div className="auth-divider"><span/>o creá tu cuenta con correo<span/></div>
-      <div className="register-grid">
-        <label>Nombre<input required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Martín"/></label>
-        <label>Apellido<input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="González"/></label>
-        <label>Nombre de usuario<input required value={username} onChange={event => setUsername(event.target.value)} placeholder="martin.gonzalez"/></label>
-        <label>Correo electrónico<input type="email" required readOnly={Boolean(invitation)} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
-        <label>Contraseña<div className="password-input"><input type={showPassword ? "text" : "password"} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 caracteres o más"/><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>
-        <label>Repetir contraseña<input type={showPassword ? "text" : "password"} required value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Repetí la contraseña"/></label>
+      <button className="google-auth-button" type="button" disabled={busy||invitationLoading} onClick={()=>void googleAuth()}><GoogleMark/><span>{invitation?"Aceptar invitación con Google":"Continuar con Google"}</span></button>
+      <div className="auth-divider"><span/>o continuá con correo<span/></div>
+      <div className="register-progress" aria-label={`Paso ${registerStep} de 4`}><div className="register-progress-top"><strong>Paso {registerStep} de 4</strong><span>{["Tu nombre","Tu usuario","Tu correo","Tu contraseña"][registerStep-1]}</span></div><div className="register-progress-bar"><i style={{width:`${registerStep*25}%`}}/></div></div>
+      <div className="register-step" key={registerStep}>
+        {registerStep===1 && <div className="register-step-fields"><label>Nombre completo<div className="register-fullname"><input autoFocus required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Nombre"/><input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="Apellido"/></div></label><p className="register-step-help">Usalo tal como querés que aparezca dentro de Growr360.</p></div>}
+        {registerStep===2 && <div className="register-step-fields"><label>Nombre de usuario<input autoFocus required value={username} onChange={event => setUsername(event.target.value)} placeholder="martin.gonzalez"/></label><p className="register-step-help">Entre 3 y 30 caracteres. Podés usar letras, números, punto, guion y guion bajo.</p></div>}
+        {registerStep===3 && <div className="register-step-fields"><label>Correo electrónico<input autoFocus type="email" required readOnly={Boolean(invitation)} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label><p className="register-step-help">Lo vas a usar para ingresar y recibir invitaciones a grupos.</p></div>}
+        {registerStep===4 && <div className="register-step-fields"><label>Contraseña<div className="password-input"><input autoFocus type={showPassword ? "text" : "password"} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 caracteres o más"/><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label><label>Repetir contraseña<input type={showPassword ? "text" : "password"} required value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Repetí la contraseña"/></label><label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)}/><span>Acepto los <a href="/terminos" target="_blank">términos</a> y la <a href="/privacidad" target="_blank">política de privacidad</a>.</span></label></div>}
       </div>
-      <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)}/><span>Acepto los <a href="/terminos" target="_blank">términos y condiciones</a> y la <a href="/privacidad" target="_blank">política de privacidad</a>.</span></label>
-      {!invitation && <div className="owner-note"><Users/><span><strong>Los roles se definen dentro de cada grupo.</strong> Después de crear tu cuenta podés crear una organización o solicitar acceso a una existente.</span></div>}
       {message && <p className="form-error">{message}</p>}
-      <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <ArrowRight/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>
+      <div className="register-wizard-actions">{registerStep>1 && <button type="button" className="register-prev" onClick={()=>{setMessage("");setRegisterStep(step=>Math.max(1,step-1));}}><ChevronLeft/> Atrás</button>}{registerStep<4 ? <button type="button" className="auth-submit" onClick={registerNext}>Continuar <ArrowRight/></button> : <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <Check/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>}</div>
       <p className="auth-switch">¿Ya tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button></p>
     </form>}
     </div>
