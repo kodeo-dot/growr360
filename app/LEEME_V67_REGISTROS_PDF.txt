@@ -1,0 +1,10 @@
+Growr360 v67
+
+- Registros y monitoreos ahora permiten selección múltiple.
+- La barra de acciones aparece integrada debajo de filtros, sin sombra y con controles cuadrados.
+- Exportación múltiple: ZIP con archivos .PDF reales (no HTML).
+- OTs: la exportación múltiple también fue actualizada para guardar PDFs reales dentro del ZIP.
+- Eliminación múltiple de registros respeta delete_any_records / delete_own_records del lado de Supabase.
+
+Antes de usar eliminación múltiple de registros, ejecutar en Supabase:
+RECORDS_BULK_ACTIONS_V67.sql
