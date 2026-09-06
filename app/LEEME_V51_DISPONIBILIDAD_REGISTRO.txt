@@ -1,0 +1,9 @@
+Growr360 v51 — disponibilidad en registro
+
+1. Ejecutá AUTH_AVAILABILITY.sql una sola vez en Supabase > SQL Editor.
+2. El paso "Tu usuario" consulta disponibilidad automáticamente con debounce de 350 ms.
+3. No se habilita "Continuar" hasta que el username aparezca como disponible.
+4. El paso "Tu correo" hace lo mismo contra auth.users y tampoco permite avanzar hasta confirmarlo.
+5. La comprobación se vuelve a validar antes de crear la cuenta.
+
+Nota: la función es SECURITY DEFINER porque auth.users no es consultable directamente desde el navegador. Solo devuelve dos booleanos de disponibilidad; no expone datos de usuarios.

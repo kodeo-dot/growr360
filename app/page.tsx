@@ -18,7 +18,7 @@ import {
   TrendingUp, Undo2, Users, X, Satellite, SlidersHorizontal, BarChart3,
   Compass, LocateFixed, PieChart, LineChart, Waves, ContactRound, MoreHorizontal, Phone, CreditCard, Home
   , ArrowRight, BriefcaseBusiness, CloudSun, Eye, EyeOff, LockKeyhole, ShieldCheck, ImageIcon, UploadCloud,
-  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, Minimize2, FileUp, History, GripVertical, ArrowUp, ArrowDown
+  Copy, Link2, Mail, Smartphone, UserPlus, Paperclip, Download, Maximize2, Minimize2, FileUp, History, GripVertical, ArrowUp, ArrowDown, Building2
 } from "lucide-react";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://emwfdcekpxwzvnidwdls.supabase.co";
@@ -276,6 +276,8 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
   const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
   const [invitationLoading, setInvitationLoading] = useState(Boolean(inviteToken));
   const [registerStep, setRegisterStep] = useState(1);
+  const [usernameAvailability, setUsernameAvailability] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "error">("idle");
+  const [emailAvailability, setEmailAvailability] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "error">("idle");
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -286,6 +288,36 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       setInvitation(row); setEmail(row.email); setScreen("register");
     });
   }, [client, inviteToken]);
+
+  useEffect(() => {
+    if (screen !== "register" || registerStep !== 2) return;
+    const value = username.trim().toLowerCase();
+    if (!value) { setUsernameAvailability("idle"); return; }
+    if (!/^[a-z0-9._-]{3,30}$/.test(value)) { setUsernameAvailability("invalid"); return; }
+    setUsernameAvailability("checking");
+    const timer = window.setTimeout(async () => {
+      const { data, error } = await client.rpc("check_signup_availability", { p_username: value, p_email: null });
+      if (error) { setUsernameAvailability("error"); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      setUsernameAvailability(row?.username_available === true ? "available" : "taken");
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [client, screen, registerStep, username]);
+
+  useEffect(() => {
+    if (screen !== "register" || registerStep !== 3) return;
+    const value = email.trim().toLowerCase();
+    if (!value) { setEmailAvailability("idle"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setEmailAvailability("invalid"); return; }
+    setEmailAvailability("checking");
+    const timer = window.setTimeout(async () => {
+      const { data, error } = await client.rpc("check_signup_availability", { p_username: null, p_email: value });
+      if (error) { setEmailAvailability("error"); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      setEmailAvailability(row?.email_available === true ? "available" : "taken");
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [client, screen, registerStep, email]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -313,9 +345,11 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     }
     if (registerStep === 2) {
       if (!/^[A-Za-z0-9._-]{3,30}$/.test(username.trim())) return setMessage("El usuario debe tener entre 3 y 30 caracteres y no incluir espacios.");
+      if (usernameAvailability !== "available") return setMessage(usernameAvailability === "taken" ? "Ese nombre de usuario ya está en uso." : "Esperá a que confirmemos que el usuario está disponible.");
     }
     if (registerStep === 3) {
       if (!email.trim()) return setMessage("Ingresá tu correo electrónico.");
+      if (emailAvailability !== "available") return setMessage(emailAvailability === "taken" ? "Ese correo ya está registrado." : "Esperá a que confirmemos que el correo está disponible.");
     }
     setRegisterStep(step => Math.min(4, step + 1));
   }
@@ -324,6 +358,8 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     event.preventDefault(); setMessage("");
     if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim()) return setMessage("Completá todos los datos personales.");
     if (!/^[A-Za-z0-9._-]{3,30}$/.test(username.trim())) return setMessage("El usuario debe tener entre 3 y 30 caracteres y no incluir espacios.");
+    if (usernameAvailability !== "available") return setMessage("Volvé al paso de usuario y confirmá que esté disponible.");
+    if (emailAvailability !== "available") return setMessage("Volvé al paso de correo y confirmá que esté disponible.");
     if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) return setMessage("La contraseña debe tener 8 caracteres, mayúscula, minúscula y número.");
     if (password !== confirmation) return setMessage("Las contraseñas no coinciden.");
     if (!acceptedTerms) return setMessage("Aceptá los términos y la política de privacidad para continuar.");
@@ -369,16 +405,26 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       <div className="register-progress" aria-label={`Paso ${registerStep} de 4`}><div className="register-progress-top"><strong>Paso {registerStep} de 4</strong><span>{["Tu nombre","Tu usuario","Tu correo","Tu contraseña"][registerStep-1]}</span></div><div className="register-progress-bar"><i style={{width:`${registerStep*25}%`}}/></div></div>
       <div className="register-step" key={registerStep}>
         {registerStep===1 && <div className="register-step-fields"><label>Nombre completo<div className="register-fullname"><input autoFocus required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Nombre"/><input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="Apellido"/></div></label><p className="register-step-help">Usalo tal como querés que aparezca dentro de Growr360.</p></div>}
-        {registerStep===2 && <div className="register-step-fields"><label>Nombre de usuario<input autoFocus required value={username} onChange={event => setUsername(event.target.value)} placeholder="martin.gonzalez"/></label><p className="register-step-help">Entre 3 y 30 caracteres. Podés usar letras, números, punto, guion y guion bajo.</p></div>}
-        {registerStep===3 && <div className="register-step-fields"><label>Correo electrónico<input autoFocus type="email" required readOnly={Boolean(invitation)} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label><p className="register-step-help">Lo vas a usar para ingresar y recibir invitaciones a grupos.</p></div>}
+        {registerStep===2 && <div className="register-step-fields"><label>Nombre de usuario<div className={`availability-input availability-${usernameAvailability}`}><input autoFocus required value={username} onChange={event => { setUsername(event.target.value); setMessage(""); }} placeholder="martin.gonzalez"/>{usernameAvailability==="checking"?<LoaderCircle className="spin"/>:usernameAvailability==="available"?<Check/>:usernameAvailability==="taken"||usernameAvailability==="invalid"||usernameAvailability==="error"?<X/>:null}</div></label><AvailabilityMessage type="username" status={usernameAvailability}/><p className="register-step-help">Entre 3 y 30 caracteres. Podés usar letras, números, punto, guion y guion bajo.</p></div>}
+        {registerStep===3 && <div className="register-step-fields"><label>Correo electrónico<div className={`availability-input availability-${emailAvailability}`}><input autoFocus type="email" required readOnly={Boolean(invitation)} value={email} onChange={event => { setEmail(event.target.value); setMessage(""); }} placeholder="nombre@empresa.com"/>{emailAvailability==="checking"?<LoaderCircle className="spin"/>:emailAvailability==="available"?<Check/>:emailAvailability==="taken"||emailAvailability==="invalid"||emailAvailability==="error"?<X/>:null}</div></label><AvailabilityMessage type="email" status={emailAvailability}/><p className="register-step-help">Lo vas a usar para ingresar y recibir invitaciones a grupos.</p></div>}
         {registerStep===4 && <div className="register-step-fields"><label>Contraseña<div className="password-input"><input autoFocus type={showPassword ? "text" : "password"} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 caracteres o más"/><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label><label>Repetir contraseña<input type={showPassword ? "text" : "password"} required value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Repetí la contraseña"/></label><label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)}/><span>Acepto los <a href="/terminos" target="_blank">términos</a> y la <a href="/privacidad" target="_blank">política de privacidad</a>.</span></label></div>}
       </div>
       {message && <p className="form-error">{message}</p>}
-      <div className="register-wizard-actions">{registerStep>1 && <button type="button" className="register-prev" onClick={()=>{setMessage("");setRegisterStep(step=>Math.max(1,step-1));}}><ChevronLeft/> Atrás</button>}{registerStep<4 ? <button type="button" className="auth-submit" onClick={registerNext}>Continuar <ArrowRight/></button> : <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <Check/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>}</div>
+      <div className="register-wizard-actions">{registerStep>1 && <button type="button" className="register-prev" onClick={()=>{setMessage("");setRegisterStep(step=>Math.max(1,step-1));}}><ChevronLeft/> Atrás</button>}{registerStep<4 ? <button type="button" className="auth-submit" disabled={(registerStep===2&&usernameAvailability!=="available")||(registerStep===3&&emailAvailability!=="available")} onClick={registerNext}>Continuar <ArrowRight/></button> : <button className="auth-submit" disabled={busy}>{busy ? <LoaderCircle className="spin"/> : <Check/>}{busy ? "Creando cuenta…" : "Crear mi cuenta"}</button>}</div>
       <p className="auth-switch">¿Ya tenés cuenta? <button type="button" onClick={() => { setMessage(""); setScreen("login"); }}>Ingresar</button></p>
     </form>}
     </div>
   </div>;
+}
+
+function AvailabilityMessage({ type, status }: { type: "username" | "email"; status: "idle" | "checking" | "available" | "taken" | "invalid" | "error" }) {
+  if (status === "idle") return null;
+  const label = type === "username" ? "nombre de usuario" : "correo";
+  if (status === "checking") return <p className="availability-message checking"><LoaderCircle className="spin"/>Comprobando disponibilidad…</p>;
+  if (status === "available") return <p className="availability-message available"><Check/>Este {label} está disponible.</p>;
+  if (status === "taken") return <p className="availability-message unavailable"><X/>Este {label} ya está en uso.</p>;
+  if (status === "invalid") return <p className="availability-message unavailable"><X/>{type === "username" ? "Usá entre 3 y 30 caracteres válidos." : "Ingresá un correo válido."}</p>;
+  return <p className="availability-message unavailable"><X/>No pudimos comprobarlo. Intentá nuevamente.</p>;
 }
 
 function PublicLanding({ onLogin, onRegister, onLegal }: { onLogin: () => void; onRegister: () => void; onLegal: (page:"terms"|"privacy"|"faq") => void }) {
@@ -2196,6 +2242,7 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
   const [message, setMessage] = useState("");
   const [browserError, setBrowserError] = useState("");
   const [creating,setCreating]=useState(false);
+  const [createStep,setCreateStep]=useState(1);
   const [newGroup,setNewGroup]=useState({name:"",description:"",cuit:""});
   const [newGroupImage,setNewGroupImage]=useState<File|null>(null);
   const [newGroupImageUrl,setNewGroupImageUrl]=useState("");
@@ -2277,15 +2324,15 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
     setWorkingId("");
   };
 
-  const createGroup=async(event:FormEvent)=>{event.preventDefault();setWorkingId("create");setBrowserError("");if(newGroupImage&&newGroupImage.size>5*1024*1024){setWorkingId("");setBrowserError("La imagen no puede superar los 5 MB.");return}const{data,error}=await supabase.rpc("create_group",{p_name:newGroup.name.trim(),p_description:newGroup.description.trim(),p_cuit:newGroup.cuit.replace(/\D/g,"")});if(error){setWorkingId("");setBrowserError(error.message);return}const created=relation(data as Group|Group[]|null);if(created?.id&&newGroupImage){const extension=(newGroupImage.name.split(".").pop()||"jpg").toLowerCase();const imagePath=`${created.id}/group-${Date.now()}.${extension}`;const uploaded=await supabase.storage.from("group-images").upload(imagePath,newGroupImage,{contentType:newGroupImage.type||"image/jpeg",upsert:false});if(uploaded.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos guardar la foto: ${uploaded.error.message}`);await onMembershipChanged();return}const updated=await supabase.from("groups").update({image_path:imagePath}).eq("id",created.id);if(updated.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos vincular la foto: ${updated.error.message}`);await onMembershipChanged();return}}setWorkingId("");setMessage("Grupo creado. Ya podés empezar a configurarlo.");setNewGroup({name:"",description:"",cuit:""});setNewGroupImage(null);await onMembershipChanged();setCreating(false);};
+  const createGroup=async(event:FormEvent)=>{event.preventDefault();setWorkingId("create");setBrowserError("");if(newGroupImage&&newGroupImage.size>5*1024*1024){setWorkingId("");setBrowserError("La imagen no puede superar los 5 MB.");return}const{data,error}=await supabase.rpc("create_group",{p_name:newGroup.name.trim(),p_description:newGroup.description.trim(),p_cuit:newGroup.cuit.replace(/\D/g,"")});if(error){setWorkingId("");setBrowserError(error.message);return}const created=relation(data as Group|Group[]|null);if(created?.id&&newGroupImage){const extension=(newGroupImage.name.split(".").pop()||"jpg").toLowerCase();const imagePath=`${created.id}/group-${Date.now()}.${extension}`;const uploaded=await supabase.storage.from("group-images").upload(imagePath,newGroupImage,{contentType:newGroupImage.type||"image/jpeg",upsert:false});if(uploaded.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos guardar la foto: ${uploaded.error.message}`);await onMembershipChanged();return}const updated=await supabase.from("groups").update({image_path:imagePath}).eq("id",created.id);if(updated.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos vincular la foto: ${updated.error.message}`);await onMembershipChanged();return}}setWorkingId("");setMessage("Grupo creado. Ya podés empezar a configurarlo.");setNewGroup({name:"",description:"",cuit:""});setNewGroupImage(null);setCreateStep(1);await onMembershipChanged();setCreating(false);};
 
   return <div className="record-detail-backdrop group-browser-backdrop">
     <section className="group-browser">
-      <header className="group-browser-head"><div><span className="eyebrow">ORGANIZACIONES</span><h2>Buscar un grupo de trabajo</h2><p>Encontrá una organización por nombre o CUIT y solicitá acceso de forma segura.</p></div><div><button className="soft-button create-group-shortcut" onClick={()=>setCreating(value=>!value)}><Plus/>{creating?"Volver a buscar":"Crear grupo"}</button><button className="soft-button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
-      <form className="group-search" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => { setQuery(event.target.value); setResults([]); setSelectedId(""); setHasSearched(false); setBrowserError(""); }} placeholder="Buscar por nombre de organización o CUIT" autoFocus/><button type="submit">Buscar</button></form>
+      <header className="group-browser-head group-browser-head-clean"><div><span className="eyebrow">ORGANIZACIONES</span><h2>{creating?"Crear un grupo":"Encontrá tu grupo"}</h2><p>{creating?"Configurá tu espacio de trabajo en pocos pasos.":"Buscá la organización donde trabajás y solicitá acceso."}</p></div><div><button className="soft-button create-group-shortcut" onClick={()=>{setCreating(value=>!value);setCreateStep(1);setBrowserError("");setMessage("")}}>{creating?<Search/>:<Plus/>}{creating?"Buscar grupo":"Crear grupo"}</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
+      {!creating&&<div className="group-search-shell"><form className="group-search group-search-clean" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => { setQuery(event.target.value); setResults([]); setSelectedId(""); setHasSearched(false); setBrowserError(""); }} placeholder="Nombre del grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form><button className="group-refresh-link" type="button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button></div>}
       {message && <div className="group-message success"><Check/>{message}</div>}
       {browserError && <div className="group-message error"><X/>{browserError}</div>}
-      {creating&&<form className="create-group-panel" onSubmit={createGroup}><div className="create-group-intro"><div className="create-group-image-preview">{newGroupImageUrl?<img src={newGroupImageUrl} alt="Vista previa del grupo"/>:<Tractor/>}</div><div><span className="eyebrow">NUEVO ESPACIO DE TRABAJO</span><h3>Creá el grupo de tu empresa</h3><p>Vas a quedar registrado como dueño y después podrás invitar al equipo.</p><label className="create-group-image-button"><UploadCloud/>Elegir foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setNewGroupImage(event.target.files?.[0]??null)}/></label></div></div><label>Nombre del grupo<input required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. Establecimiento La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="11 dígitos"/></label><label className="wide">Descripción<textarea value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Contá brevemente a qué se dedica el grupo"/></label><button className="group-primary" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button></form>}
+      {creating&&<form className="create-group-panel create-group-wizard" onSubmit={createGroup}><div className="create-group-progress"><div><span>Paso {createStep} de 3</span><strong>{createStep===1?"Datos principales":createStep===2?"Presentación":"Últimos detalles"}</strong></div><div className="create-group-progress-track"><i style={{width:`${createStep/3*100}%`}}/></div></div>{createStep===1&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><Building2/></span><div><h3>¿Cómo se llama tu organización?</h3><p>Estos datos identifican al grupo dentro de Growr360.</p></div></div><label>Nombre del grupo<input autoFocus required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. Establecimiento La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="11 dígitos"/></label></div>}{createStep===2&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><FileText/></span><div><h3>Contanos un poco más</h3><p>Una descripción corta ayuda al equipo a reconocer el espacio correcto.</p></div></div><label>Descripción<textarea autoFocus value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Ej. Producción agrícola y gestión de lotes de la empresa"/></label></div>}{createStep===3&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><ImageIcon/></span><div><h3>Personalizá tu grupo</h3><p>La foto es opcional y podés cambiarla después desde configuración.</p></div></div><label className="create-group-photo-picker"><div className="create-group-image-preview">{newGroupImageUrl?<img src={newGroupImageUrl} alt="Vista previa del grupo"/>:<Tractor/>}</div><span><strong>{newGroupImage?newGroupImage.name:"Agregar foto"}</strong><small>JPG, PNG o WebP · máximo 5 MB</small></span><UploadCloud/><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setNewGroupImage(event.target.files?.[0]??null)}/></label><div className="create-group-summary"><div><small>Nombre</small><strong>{newGroup.name||"Sin nombre"}</strong></div><div><small>CUIT</small><strong>{newGroup.cuit||"Sin CUIT"}</strong></div></div></div>}<div className="create-group-wizard-actions">{createStep>1&&<button type="button" className="soft-button" onClick={()=>setCreateStep(step=>Math.max(1,step-1))}>Atrás</button>}<span/>{createStep<3?<button type="button" className="group-primary wizard-primary" disabled={createStep===1&&(!newGroup.name.trim()||newGroup.cuit.length!==11)} onClick={()=>setCreateStep(step=>Math.min(3,step+1))}>Continuar<ArrowRight/></button>:<button className="group-primary wizard-primary" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button>}</div></form>}
       {!creating&&<>
       <div className="group-browser-layout">
         <div className="group-results">
