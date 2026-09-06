@@ -1,0 +1,15 @@
+Growr360 v61 — eliminar órdenes de trabajo
+
+1. Ejecutar OT_DELETE_PERMISSION_V61.sql en Supabase SQL Editor.
+2. Publicar esta versión de la web.
+
+Comportamiento:
+- El botón “Eliminar OT” aparece solo si el usuario tiene permiso.
+- Dueño/Admin: pueden eliminar cualquier OT salvo que tengan un override explícito que lo bloquee.
+- Agrónomo: por defecto puede eliminar únicamente OTs propias.
+- Otros roles: requieren un permiso personalizado.
+- Se usan los permisos delete_own_records y delete_any_records, visibles también en Equipo → Permisos personalizados.
+- La eliminación es lógica (deleted_at), no física.
+- Si una OT ya fue finalizada, los registros formales generados por esa OT se conservan.
+
+Además se corrigió la unidad visual del TOTAL OT para gr/ha: el total convertido se muestra en kg.

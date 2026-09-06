@@ -355,3 +355,8 @@
   .work-order-print-host .print-only-brand-header img{display:block!important;visibility:visible!important;opacity:1!important;object-fit:contain!important}
   .work-order-print-host .print-only-brand-header .print-brand-accent{color:#20a85a!important}
 }
+
+/* v61 · eliminación de OT */
+.work-order-actions .work-order-delete{margin-left:auto;color:#a12f2a;border-color:#e7c8c5;background:#fff}
+.work-order-actions .work-order-delete:hover{background:#fff5f4;border-color:#dcaeaa}
+@media(max-width:800px){.work-order-actions .work-order-delete{margin-left:0}}
