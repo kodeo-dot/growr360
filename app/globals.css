@@ -1330,3 +1330,55 @@ html.admin-route-open,body.admin-route-open{height:auto!important;min-height:100
 .sat-zone-grid-v35 i{grid-area:dot;width:7px;height:24px;border-radius:5px}.sat-zone-grid-v35 em{grid-area:copy;min-width:0;font-style:normal;display:flex;align-items:baseline;gap:4px}.sat-zone-grid-v35 em b{font-size:9px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sat-zone-grid-v35 em small{font-size:8px;color:var(--muted);white-space:nowrap}.sat-zone-grid-v35>span>strong{grid-area:area;font-size:10.5px;line-height:1.05;color:var(--ink);font-weight:900;white-space:nowrap}
 @media(max-width:900px){.sat-zones-v35.zones-5 .sat-zone-grid-v35{grid-template-columns:repeat(3,minmax(0,1fr))}.sat-zones-meta-v35 small{white-space:normal;text-align:right}}
 @media(max-width:600px){.sat-zone-grid-v35,.sat-zones-v35.zones-5 .sat-zone-grid-v35{grid-template-columns:repeat(2,minmax(0,1fr))}.sat-zones-meta-v35{align-items:flex-start}.sat-zones-meta-v35 small{font-size:8.5px}}
+
+/* v39 · satellite premium console */
+.sat-premium-v39{
+  width:min(556px,calc(100% - 190px))!important;
+  max-height:min(390px,calc(100% - 36px))!important;
+  border-radius:18px!important;
+  border:1px solid rgba(18,53,40,.14)!important;
+  background:rgba(252,254,253,.985)!important;
+  box-shadow:0 24px 60px rgba(8,28,20,.22),0 3px 10px rgba(8,28,20,.08)!important;
+}
+.sat-premium-v39 .satellite-top-v28{
+  min-height:54px!important;padding:9px 10px 9px 12px!important;
+  background:linear-gradient(180deg,#fff 0%,#fbfdfc 100%)!important;
+}
+.sat-premium-v39 .sat-title-v28{min-width:0!important;flex:1!important}
+.sat-premium-v39 .sat-icon-v28{width:34px!important;height:34px!important;flex-basis:34px!important;border-radius:10px!important;background:#edf8f1!important;color:var(--green)!important}
+.sat-premium-v39 .sat-title-v28 strong{font-size:13.5px!important;letter-spacing:-.15px!important}
+.sat-premium-v39 .sat-title-v28 small{font-size:9.5px!important}
+.sat-plan-chip-v39{margin-left:auto;padding:4px 7px;border-radius:999px;background:#eef6f1;border:1px solid #dcebe2;color:#436c59;font-size:8px;font-weight:900;letter-spacing:.08em;line-height:1}
+.sat-premium-v39 .sat-body-v29{padding:9px 10px 10px!important;gap:8px!important;max-height:calc(min(390px,calc(100vh - 36px)) - 54px)!important}
+.sat-control-card-v39,.sat-index-card-v39{border:1px solid #e3ebe6;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 2px rgba(11,45,31,.03)}
+.sat-control-card-v39{display:grid;gap:6px}
+.sat-index-card-v39{display:grid;grid-template-columns:82px minmax(0,1fr);align-items:center;gap:8px}
+.sat-control-label-v39{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.sat-control-label-v39 span{font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:#375144}
+.sat-control-label-v39 small{font-size:8px;color:var(--muted);white-space:nowrap}
+.sat-premium-v39 .sat-toolbar-v29{grid-template-columns:minmax(0,1fr) 150px!important;gap:8px!important}
+.sat-premium-v39 .sat-plot-picker-v29 select{height:34px!important;font-size:11px!important;border-color:#dce5df!important;background:#fbfdfc!important}
+.sat-premium-v39 .sat-opacity-v29{height:34px!important;border:1px solid #dce5df!important;background:#fbfdfc!important}
+.sat-premium-v39 .sat-opacity-v29>span>b{font-size:10px!important}
+.sat-premium-v39 .sat-selector-v29{padding:0!important;gap:5px!important;scrollbar-width:none!important}
+.sat-premium-v39 .sat-selector-v29::-webkit-scrollbar{display:none!important}
+.sat-premium-v39 .sat-selector-v29 button{min-height:30px!important;padding:6px 9px!important;border-radius:9px!important;font-size:9.5px!important;border:1px solid #e0e8e3!important;background:#f8faf9!important;color:#567064!important}
+.sat-premium-v39 .sat-selector-v29 button:hover{background:#f1f7f3!important;color:#244b39!important}
+.sat-premium-v39 .sat-selector-v29 button.active{background:#173f30!important;color:#fff!important;border-color:#173f30!important;box-shadow:0 3px 8px rgba(23,63,48,.16)!important}
+.sat-premium-v39 .sat-plan-note-v30{border-radius:10px!important;padding:6px 8px!important;background:#f5faf7!important;border-color:#dbece2!important}
+.sat-premium-v39 .sat-plan-note-v30>span{font-size:8px!important}
+.sat-premium-v39 .sat-plan-note-v30 p{font-size:9px!important;color:#607269!important}
+.sat-premium-v39 .sat-zones-v35{border-radius:12px!important;background:#fff!important;padding:8px!important;border-color:#e1e9e4!important}
+.sat-premium-v39 .sat-zones-meta-v35 strong{font-size:11.5px!important}.sat-premium-v39 .sat-zones-meta-v35 small{font-size:9px!important}
+.sat-premium-v39 .sat-history-v29{border-top:1px solid #e7eee9;padding-top:7px!important}
+.sat-premium-v39 .sat-history-head-v29 strong{font-size:11px!important}.sat-premium-v39 .sat-history-head-v29 small{font-size:8.5px!important}
+.sat-premium-v39 .sat-history-head-v29>span{font-size:8px!important;background:#f2f6f4!important;border:1px solid #e0e7e3!important;color:#526b60!important}
+.sat-premium-v39 .sat-filmstrip-v29{gap:7px!important}
+.sat-premium-v39 .sat-filmstrip-v29 button{flex:0 0 116px!important;border-radius:10px!important;border:1px solid #e0e7e3!important;background:#fff!important;overflow:hidden!important;box-shadow:0 2px 7px rgba(8,35,24,.045)!important}
+.sat-premium-v39 .sat-filmstrip-v29 button.active{border-color:#2c7f59!important;box-shadow:0 0 0 2px rgba(44,127,89,.12),0 4px 10px rgba(8,35,24,.07)!important}
+.sat-premium-v39 .sat-filmstrip-v29 .sentinel-preview-image,.sat-premium-v39 .sat-filmstrip-v29 .sentinel-preview{height:62px!important}
+.sat-premium-v39 .sat-filmstrip-v29 .sat-date-copy{padding:6px 7px!important}.sat-premium-v39 .sat-filmstrip-v29 .sat-date-copy b{font-size:9px!important}.sat-premium-v39 .sat-filmstrip-v29 .sat-date-copy small{font-size:8px!important}
+.sat-premium-v39.minimized{width:min(320px,calc(100% - 190px))!important;max-height:54px!important}
+.sat-premium-v39.minimized .satellite-top-v28{min-height:54px!important}
+@media(max-width:900px){.sat-premium-v39{width:min(500px,calc(100% - 90px))!important}.sat-index-card-v39{grid-template-columns:72px minmax(0,1fr)}}
+@media(max-width:760px){.sat-premium-v39{left:10px!important;right:62px!important;width:auto!important;max-height:min(390px,calc(100% - 145px))!important}.sat-premium-v39 .sat-body-v29{max-height:calc(min(390px,calc(100vh - 145px)) - 54px)!important}.sat-control-card-v39,.sat-index-card-v39{padding:7px!important}.sat-index-card-v39{grid-template-columns:1fr!important;gap:5px!important}.sat-premium-v39 .sat-toolbar-v29{grid-template-columns:minmax(0,1fr) 126px!important}.sat-plan-chip-v39{display:none}.sat-premium-v39 .sat-filmstrip-v29 button{flex-basis:108px!important}.sat-premium-v39.minimized{width:min(290px,calc(100% - 82px))!important}}
