@@ -1,0 +1,10 @@
+Growr360 v44 · Inicio de sesión y registro con Google
+
+- Agrega Google OAuth mediante Supabase Auth en login y registro.
+- Las invitaciones se conservan durante el redirect OAuth.
+- Una cuenta nueva de Google entra al mismo onboarding que una cuenta de correo: crear grupo o solicitar ingreso.
+- Nombre, apellido, email y foto se toman de Google cuando están disponibles.
+- La foto de Google se guarda en profiles.avatar_path como URL externa cuando el perfil no tiene una foto propia. ProfileAvatar ahora admite tanto rutas del bucket avatars como URLs HTTPS.
+- El lote NDVI del panel de autenticación usa import estático de Next para que la imagen se empaquete correctamente y no dependa de una ruta pública inexistente.
+
+Configuración externa requerida: activar Google en Supabase Auth y crear las credenciales OAuth Web en Google Cloud / Google Auth Platform.

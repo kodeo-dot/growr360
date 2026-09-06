@@ -5,6 +5,8 @@ import "./operations-refinement.css";
 import "./visual-refresh.css";
 import "./landing-redesign.css";
 
+import authFieldImage from "./auth-field.png";
+
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
@@ -155,8 +157,16 @@ function relation<T>(value: T | T[] | null | undefined): T | null {
 
 function ProfileAvatar({profile,name,className="member-avatar"}:{profile?:Profile|null;name:string;className?:string}){
   const [url,setUrl]=useState("");
-  useEffect(()=>{let active=true;setUrl("");if(!profile?.avatar_path)return;supabase.storage.from("avatars").createSignedUrl(profile.avatar_path,3600).then(({data})=>{if(active)setUrl(data?.signedUrl??"")});return()=>{active=false}},[profile?.avatar_path]);
-  return <div className={`${className} profile-avatar`}>{url?<img src={url} alt={`Foto de ${name}`}/>:initials(name)}</div>
+  useEffect(()=>{
+    let active=true;
+    setUrl("");
+    const avatar=profile?.avatar_path?.trim()??"";
+    if(!avatar)return()=>{active=false};
+    if(/^https?:\/\//i.test(avatar)){setUrl(avatar);return()=>{active=false};}
+    supabase.storage.from("avatars").createSignedUrl(avatar,3600).then(({data})=>{if(active)setUrl(data?.signedUrl??"")});
+    return()=>{active=false};
+  },[profile?.avatar_path]);
+  return <div className={`${className} profile-avatar`}>{url?<img src={url} alt={`Foto de ${name}`} referrerPolicy="no-referrer"/>:initials(name)}</div>
 }
 
 function geometry(value: Plot["geometry_json"]): GeoFeature | null {
@@ -285,6 +295,17 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     setBusy(false);
   }
 
+  async function googleAuth() {
+    setBusy(true); setMessage("");
+    if(inviteToken)localStorage.setItem("growr360-invite",inviteToken);
+    const redirectTo=`${window.location.origin}${window.location.pathname}`;
+    const { error } = await client.auth.signInWithOAuth({
+      provider:"google",
+      options:{ redirectTo, queryParams:{ prompt:"select_account" } }
+    });
+    if(error){setMessage(`No pudimos iniciar con Google: ${error.message}`);setBusy(false);}
+  }
+
   async function register(event: FormEvent) {
     event.preventDefault(); setMessage("");
     if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim()) return setMessage("Completá todos los datos personales.");
@@ -317,7 +338,7 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       <div className="auth-showcase-copy"><span className="public-kicker"><Leaf/> Gestión agrícola inteligente</span><h2>Tu campo,<br/>con más información.</h2><p>Monitoreá, planificá y gestioná tus lotes desde un solo lugar.</p></div>
       <div className="auth-real-map" aria-hidden="true">
         <div className="auth-map-orbit orbit-a"/><div className="auth-map-orbit orbit-b"/>
-        <div className="auth-real-field"/>
+        <img className="auth-real-field" src={authFieldImage.src} alt="Vista satelital NDVI de un lote"/>
         <div className="auth-satellite-badge"><Satellite/><span><strong>Imágenes satelitales</strong><small>NDVI · análisis por zonas</small></span></div>
         <div className="auth-map-status auth-map-status-real"><span/><div><strong>Información actualizada</strong><small>Seguimiento del lote en una sola vista</small></div></div>
       </div>
@@ -327,6 +348,8 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       <Brand/>
       <div className="auth-mode-tabs"><button type="button" className="active">Ingresar</button><button type="button" onClick={() => { setMessage(""); setScreen("register"); }}>Crear cuenta</button></div>
       <div className="auth-copy"><span>BIENVENIDO DE NUEVO</span><h1>Ingresá a Growr360</h1><p>Continuá trabajando con la misma cuenta de la aplicación móvil.</p></div>
+      <button className="google-auth-button" type="button" disabled={busy} onClick={()=>void googleAuth()}><GoogleMark/><span>Continuar con Google</span></button>
+      <div className="auth-divider"><span/>o ingresá con correo<span/></div>
       <label>Correo electrónico<input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@empresa.com"/></label>
       <label>Contraseña<div className="password-input"><input type={showPassword ? "text" : "password"} required minLength={8} value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••"/><button type="button" aria-label="Mostrar contraseña" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>
       {message && <p className={message.startsWith("Cuenta creada") ? "form-success" : "form-error"}>{message}</p>}
@@ -339,6 +362,8 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
       {invitationLoading && <div className="invite-auth-banner"><LoaderCircle className="spin"/><span>Validando invitación…</span></div>}
       {invitation && <div className="invite-auth-banner"><Mail/><span><strong>{invitation.email}</strong><small>{invitation.group_name} · {roleName(invitation.role)}</small></span><Check/></div>}
       {invitation && inviteToken && <div className="invite-app-choice"><a className="open-in-app" href={`growr360://invite?invite=${encodeURIComponent(inviteToken)}`}><Smartphone/><span><strong>Abrir en la app Growr360</strong><small>Recomendado si ya la tenés instalada</small></span><ArrowRight/></a><div><span/>o continuá desde la web<span/></div></div>}
+      <button className="google-auth-button" type="button" disabled={busy||invitationLoading} onClick={()=>void googleAuth()}><GoogleMark/><span>{invitation?"Aceptar invitación con Google":"Registrarme con Google"}</span></button>
+      <div className="auth-divider"><span/>o creá tu cuenta con correo<span/></div>
       <div className="register-grid">
         <label>Nombre<input required value={firstName} onChange={event => setFirstName(event.target.value)} placeholder="Martín"/></label>
         <label>Apellido<input required value={lastName} onChange={event => setLastName(event.target.value)} placeholder="González"/></label>
@@ -724,10 +749,37 @@ function AuthenticatedApp({ session }: { session: Session }) {
     setSyncing(false);
   }, [session.user.id]);
 
+  const ensureGoogleProfile = useCallback(async () => {
+    const providers=session.user.app_metadata?.providers;
+    const isGoogle=session.user.app_metadata?.provider==="google"||(Array.isArray(providers)&&providers.includes("google"));
+    if(!isGoogle)return;
+    const metadata=(session.user.user_metadata??{}) as Record<string,unknown>;
+    const avatar=String(metadata.avatar_url??metadata.picture??"").trim();
+    const email=(session.user.email??"").trim();
+    const fullName=String(metadata.full_name??metadata.name??"").trim();
+    const given=String(metadata.given_name??"").trim();
+    const family=String(metadata.family_name??"").trim();
+    const parts=fullName.split(/\s+/).filter(Boolean);
+    const firstName=given||parts[0]||"Usuario";
+    const lastName=family||parts.slice(1).join(" ")||"Google";
+    const base=(email.split("@")[0]||`${firstName}.${lastName}`).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9._-]+/g,".").replace(/^\.+|\.+$/g,"").slice(0,24)||`usuario.${session.user.id.slice(0,6)}`;
+    const {data:existing}=await supabase.from("profiles").select("id,avatar_path").eq("id",session.user.id).maybeSingle();
+    if(existing){
+      if(avatar&&!existing.avatar_path){await supabase.from("profiles").update({avatar_path:avatar}).eq("id",session.user.id);}
+      return;
+    }
+    const profile={id:session.user.id,first_name:firstName,last_name:lastName,username:base,email,avatar_path:avatar||null};
+    const {error}=await supabase.from("profiles").insert(profile);
+    if(error&&/duplicate|unique/i.test(error.message)){
+      await supabase.from("profiles").insert({...profile,username:`${base.slice(0,21)}.${session.user.id.slice(0,6)}`});
+    }
+  },[session]);
+
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setError("");
     const userId = session.user.id;
+    await ensureGoogleProfile();
     const [profileResult, membershipResult, plansResult] = await Promise.all([
       supabase.from("profiles").select("id,first_name,last_name,username,email,phone,avatar_path").eq("id", userId).single(),
       supabase.from("group_members").select("group_id,role,status,groups(id,name,description,cuit,image_path),member_permission_overrides(permission,allowed)").eq("user_id", userId).eq("status", "active").order("created_at"),
@@ -752,7 +804,7 @@ function AuthenticatedApp({ session }: { session: Session }) {
       setSubscription(null);setSubscriptionUsage(null);
     }
     setLoading(false);
-  }, [loadGroupData, session.user.id]);
+  }, [ensureGoogleProfile, loadGroupData, session.user.id]);
 
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
 
@@ -2267,7 +2319,7 @@ function Brand() {
   return <div className="brand"><img className="brand-logo brand-logo-symbol" src="/favicon.svg" alt="Growr360"/><div><strong>Growr<span>360</span></strong><small>Gestión agrícola</small></div></div>;
 }
 function LoadingScreen({ text }: { text: string }) { return <div className="loading-screen"><img className="splash-logo" src="/favicon.svg" alt="Growr360"/><LoaderCircle className="spin"/><strong>{text}</strong></div>; }
-function EmptyWorkspace({ onGroups }: { onGroups: () => void }) { return <div className="empty-workspace"><Users/><h2>Tu cuenta todavía no tiene un grupo activo</h2><p>Buscá tu empresa o grupo de trabajo y enviá una solicitud de ingreso. Cuando te acepten, aparecerá acá automáticamente.</p><button onClick={onGroups}><Search/>Buscar grupos</button></div>; }
+function EmptyWorkspace({ onGroups }: { onGroups: () => void }) { return <div className="empty-workspace empty-workspace-onboarding"><Users/><span className="eyebrow">CUENTA LISTA</span><h2>Ahora elegí cómo vas a trabajar</h2><p>Podés crear el grupo de tu establecimiento y quedar como Propietario, o buscar una organización existente y solicitar acceso con tu rol.</p><div className="empty-workspace-actions"><button onClick={onGroups}><Plus/>Crear o buscar grupo</button></div><small>Este paso es igual para cuentas creadas con Google o con correo.</small></div>; }
 function EmptyLine({ text }: { text: string }) { return <div className="empty-line">{text}</div>; }
 function PageHead({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="page-head"><div><h2>{title}</h2><p>{text}</p></div>{action}</div>; }
 function Stat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof MapPin }) { return <div className="stat-card"><div><Icon/></div><section><small>{label}</small><strong>{value}</strong><p>{detail}</p></section></div>; }
@@ -2275,6 +2327,7 @@ function Kpi({ label, value }: { label: string; value: string }) { return <div c
 function subtitle(view: View) { return ({ campos: "Estructura territorial y productiva", contratistas:"Directorio operativo del grupo", registros: "Actividad sincronizada del equipo", monitoreos:"Seguimiento agronómico", napas:"Seguimiento de profundidad", campanas: "Ciclos productivos", reportes: "Análisis del grupo activo", equipo: "Miembros, roles y permisos", solicitudes:"Ingresos pendientes al grupo", invitaciones:"Accesos directos por enlace", mas:"Catálogos y herramientas", configuracion: "Preferencias personales", grupo:"Identidad y datos del grupo", planes:"Plan, límites y consumo", mapa: "" } as Record<View, string>)[view]; }
 function formTitle(value:string){return({field:"Crear campo",campaign:"Crear campaña",client:"Crear cliente",contractor:"Nuevo contratista",record:"Crear registro"}as Record<string,string>)[value]??"Nueva alta";}
 function cap(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
+function GoogleMark(){return <svg className="google-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.06H12v3.9h5.38a4.6 4.6 0 0 1-2 3.02v2.53h3.24c1.9-1.75 2.98-4.33 2.98-7.39Z"/><path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.38l-3.24-2.53c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.61A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.92A6 6 0 0 1 6.08 12c0-.67.11-1.32.31-1.92V7.47H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.53l3.35-2.61Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.82 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.47l3.35 2.61C7.18 7.71 9.39 5.95 12 5.95Z"/></svg>}
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "G"; }
 function roleName(role?: string) { return ({ owner: "Propietario", admin: "Administrador", agronomist: "Ingeniero / Agrónomo", operator: "Operador", monitor: "Monitoreador", producer: "Productor", member: "Miembro" } as Record<string, string>)[role ?? ""] ?? cap(role ?? "Miembro"); }
 function recordType(type: string) { return ({ sowing: "Siembra", spraying: "Pulverización", fertilization: "Fertilización", harvest: "Cosecha", work: "Roturación", monitoring: "Monitoreo", napa: "Napa", soil_analysis: "Análisis de suelo", expense: "Gasto", other: "Otros" } as Record<string, string>)[type] ?? cap(type); }
