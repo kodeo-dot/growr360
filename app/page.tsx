@@ -315,7 +315,17 @@ function AuthScreen({ client, inviteToken = "" }: { client: SupabaseClient; invi
     <div className="auth-glow"/>
     <button className="auth-back" type="button" onClick={() => { setMessage(""); setScreen("landing"); }}><ChevronLeft/> Volver al inicio</button>
     <div className="auth-layout">
-    <aside className="auth-showcase"><Brand/><span className="public-kicker"><Leaf/> Gestión agrícola inteligente</span><h2>Volvé al campo.<br/>Nosotros ordenamos los datos.</h2><p>Tu operación completa, accesible desde cualquier dispositivo y siempre sincronizada con la app.</p><div className="auth-mini-map"><div className="auth-mini-lot one">Lote 1</div><div className="auth-mini-lot two">Lote 2</div><div className="auth-map-status"><span/><strong>Equipo conectado</strong><small>Información actualizada</small></div></div><div className="auth-benefits"><span><ShieldCheck/>Acceso seguro</span><span><CloudSun/>Disponible online y offline</span></div></aside>
+    <aside className="auth-showcase auth-showcase-real">
+      <Brand/>
+      <div className="auth-showcase-copy"><span className="public-kicker"><Leaf/> Gestión agrícola inteligente</span><h2>Tu campo,<br/>con más información.</h2><p>Monitoreá, planificá y gestioná tus lotes desde un solo lugar.</p></div>
+      <div className="auth-real-map" aria-hidden="true">
+        <div className="auth-map-orbit orbit-a"/><div className="auth-map-orbit orbit-b"/>
+        <div className="auth-real-field"/>
+        <div className="auth-satellite-badge"><Satellite/><span><strong>Imágenes satelitales</strong><small>NDVI · análisis por zonas</small></span></div>
+        <div className="auth-map-status auth-map-status-real"><span/><div><strong>Información actualizada</strong><small>Seguimiento del lote en una sola vista</small></div></div>
+      </div>
+      <div className="auth-benefits auth-benefits-real"><span><ShieldCheck/>Acceso seguro</span><span><CloudSun/>Datos siempre disponibles</span></div>
+    </aside>
     {screen === "login" ? <form className="auth-card auth-card-v2" onSubmit={login}>
       <Brand/>
       <div className="auth-mode-tabs"><button type="button" className="active">Ingresar</button><button type="button" onClick={() => { setMessage(""); setScreen("register"); }}>Crear cuenta</button></div>
