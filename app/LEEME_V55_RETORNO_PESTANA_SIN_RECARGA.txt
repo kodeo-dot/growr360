@@ -1,0 +1,10 @@
+Growr360 v55 — retorno de pestaña sin pantalla de carga
+
+Corrección:
+- Supabase puede emitir TOKEN_REFRESHED cuando el navegador vuelve a enfocar la pestaña.
+- ensureGoogleProfile dependía del objeto session completo. Como Supabase entrega un nuevo objeto Session, React recreaba loadWorkspace.
+- El efecto de carga volvía a ejecutarse y mostraba "Cargando tus campos y lotes…" aunque los datos ya estuvieran visibles.
+- Ahora ensureGoogleProfile depende del ID estable del usuario, por lo que un refresh silencioso de sesión no vuelve a cargar todo el workspace.
+
+Resultado esperado:
+Cambiar a otra pestaña del navegador y volver a Growr360 conserva la vista y los lotes en pantalla. Los datos pueden seguir refrescándose mediante el botón Actualizar o los flujos de guardado existentes, sin bloquear toda la interfaz.

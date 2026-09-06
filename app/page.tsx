@@ -818,7 +818,12 @@ function AuthenticatedApp({ session }: { session: Session }) {
     if(error&&/duplicate|unique/i.test(error.message)){
       await supabase.from("profiles").insert({...profile,username:`${base.slice(0,21)}.${session.user.id.slice(0,6)}`});
     }
-  },[session]);
+  // Keep this callback stable across Supabase TOKEN_REFRESHED events.
+  // Browsers refresh/auth-check the session when a tab becomes active again; depending on the
+  // whole `session` object recreated this callback, which recreated `loadWorkspace`, which then
+  // set the app back to the full-screen "Cargando tus campos y lotes…" state. The profile
+  // bootstrap only needs to run for the current user, so the user id is the stable dependency.
+  },[session.user.id]);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
