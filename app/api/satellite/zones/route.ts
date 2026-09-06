@@ -92,6 +92,45 @@ function setup(){return {input:[{bands:["B04","B08","SCL","dataMask"]}],output:[
 function evaluatePixel(s){const invalid=[0,1,3,8,9,10,11].includes(s.SCL)||!s.dataMask;let d=s.B08+s.B04;let v=d===0?0:(s.B08-s.B04)/d;let z=${cuts.length};${checks};return {${returns},dataMask:[invalid?0:1]};}`;
 }
 
+function naturalClusterCuts(values: number[], zoneCount: number) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length < zoneCount) return null;
+
+  // 1D k-means over dense, equally-spaced quantiles. Each sample represents
+  // approximately the same pixel mass, so clusters follow natural NDVI groups
+  // instead of enforcing equal-area classes. Deterministic initialization keeps
+  // the map stable between requests.
+  let centers = Array.from({ length: zoneCount }, (_, i) => {
+    const position = ((i + 0.5) / zoneCount) * (sorted.length - 1);
+    return sorted[Math.max(0, Math.min(sorted.length - 1, Math.round(position)))];
+  });
+
+  for (let iteration = 0; iteration < 40; iteration++) {
+    const buckets = Array.from({ length: zoneCount }, () => [] as number[]);
+    for (const value of sorted) {
+      let best = 0;
+      let distance = Math.abs(value - centers[0]);
+      for (let i = 1; i < centers.length; i++) {
+        const next = Math.abs(value - centers[i]);
+        if (next < distance) { best = i; distance = next; }
+      }
+      buckets[best].push(value);
+    }
+
+    const nextCenters = centers.map((center, i) => buckets[i].length
+      ? buckets[i].reduce((sum, value) => sum + value, 0) / buckets[i].length
+      : center);
+    nextCenters.sort((a, b) => a - b);
+    const movement = nextCenters.reduce((sum, center, i) => sum + Math.abs(center - centers[i]), 0);
+    centers = nextCenters;
+    if (movement < 0.000001) break;
+  }
+
+  const cuts = centers.slice(0, -1).map((center, i) => (center + centers[i + 1]) / 2);
+  if (cuts.some((value, i) => !Number.isFinite(value) || (i > 0 && value <= cuts[i - 1] + 0.00001))) return null;
+  return cuts;
+}
+
 async function requestStats(token: string, geometry: Geometry, date: string, percentiles: number[]) {
   const response = await fetch("https://services.sentinel-hub.com/api/v1/statistics", {
     method: "POST",
@@ -149,10 +188,15 @@ export async function POST(request: Request) {
     const geometry = unwrapGeometry(payload.geometry);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.date ?? "")) throw new Error("La fecha satelital no es válida.");
     const zoneCount = payload.zoneCount === 5 ? 5 : 3;
-    const requestedPercentiles = zoneCount === 5 ? [20, 40, 60, 80] : [33, 67];
+    // Dense quantiles are used only to approximate the actual NDVI distribution.
+    // We no longer use 20/40/60/80 (or 33/67) as the zone boundaries because
+    // quantiles force each zone to contain roughly the same number of pixels/ha.
+    // That made the reported areas look artificially equal even when one vigor
+    // class occupied only a small part of the field.
+    const distributionPercentiles = Array.from({ length: 49 }, (_, i) => (i + 1) * 2); // 2..98
 
     const token = await planetInsightsToken();
-    const data = await requestStats(token, geometry, payload.date, requestedPercentiles);
+    const data = await requestStats(token, geometry, payload.date, distributionPercentiles);
     const interval = (data?.data ?? []).find((entry: any) => entry?.outputs?.ndvi?.bands?.B0?.stats) ?? data?.data?.[0];
     if (interval?.error) {
       const detail = String(interval.error?.message ?? interval.error?.type ?? "Error desconocido");
@@ -177,15 +221,19 @@ export async function POST(request: Request) {
       throw new Error(`Esta escena tiene muy pocos píxeles despejados dentro del lote (${validPixels}). Probá otra fecha con menos nubes.`);
     }
 
-    let cuts = requestedPercentiles.map(target => percentileRows.find(item => Math.abs(item.percentile - target) <= 2)?.value ?? null);
-    if (cuts.some(value => value === null) && min !== null && max !== null && max > min) {
+    // Natural NDVI classes: use the shape of the distribution, not fixed quantiles.
+    // This allows a truly small high-vigor patch (e.g. 4 ha out of 35 ha) to remain
+    // a small zone instead of being expanded to ~20% of the field by definition.
+    const distributionValues = percentileRows.map(item => item.value);
+    let numericCuts = naturalClusterCuts(distributionValues, zoneCount);
+    if (!numericCuts && min !== null && max !== null && max > min) {
+      // Conservative fallback only when the distribution cannot form distinct
+      // clusters (very flat field / too many duplicate percentile values).
       const span = max - min;
-      cuts = Array.from({ length: zoneCount - 1 }, (_, i) => min + span * ((i + 1) / zoneCount));
+      numericCuts = Array.from({ length: zoneCount - 1 }, (_, i) => min + span * ((i + 1) / zoneCount));
     }
-    if (cuts.some(value => value === null)) throw new Error(`No se pudieron obtener los cortes necesarios para dividir el lote en ${zoneCount} zonas.`);
-    const numericCuts = cuts.map(Number);
-    if (numericCuts.some((value, index) => index > 0 && value <= numericCuts[index - 1])) {
-      throw new Error(`No hubo suficiente variación de NDVI dentro del lote para formar ${zoneCount} zonas distintas en esta fecha.`);
+    if (!numericCuts || numericCuts.length !== zoneCount - 1) {
+      throw new Error(`No hubo suficiente variación de NDVI dentro del lote para formar ${zoneCount} zonas naturales en esta fecha.`);
     }
 
     const plotAreaHa = geometryAreaHa(geometry);
@@ -229,7 +277,7 @@ export async function POST(request: Request) {
       clearAreaHa,
       clearCoverage: plotAreaHa > 0 ? (clearAreaHa / plotAreaHa) * 100 : 100,
       zones,
-      method: percentileRows.length >= requestedPercentiles.length ? `ndvi_quantiles_${requestedPercentiles.join("_")}` : "ndvi_equal_range_fallback"
+      method: distributionValues.length >= zoneCount ? `ndvi_natural_clusters_${zoneCount}` : "ndvi_equal_range_fallback"
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudieron calcular las zonas NDVI." }, { status: 500 });

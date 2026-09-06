@@ -349,3 +349,9 @@
   .work-order-print-host .work-order-sheet.status-completed{position:static!important;isolation:isolate}
   .work-order-print-host .work-order-sheet.status-completed::after{content:"FINALIZADA";position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-17deg);width:72%;padding:12px 18px 10px;border-top:7px solid rgba(20,126,72,.30);border-bottom:7px solid rgba(20,126,72,.30);color:rgba(20,126,72,.21);font-size:54pt;line-height:.92;font-weight:950;letter-spacing:.08em;text-align:center;text-transform:uppercase;white-space:nowrap;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* v42 · Print brand: use the same favicon asset as the application and keep it visible in PDF */
+@media print{
+  .work-order-print-host .print-only-brand-header img{display:block!important;visibility:visible!important;opacity:1!important;object-fit:contain!important}
+  .work-order-print-host .print-only-brand-header .print-brand-accent{color:#20a85a!important}
+}

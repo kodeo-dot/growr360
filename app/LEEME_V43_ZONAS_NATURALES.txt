@@ -1,0 +1,15 @@
+Growr360 v43 — NDVI 3/5 zonas naturales
+
+Problema corregido
+- Los cortes anteriores eran cuantiles (33/67 y 20/40/60/80). Eso obliga por definición a que cada zona tenga casi la misma cantidad de píxeles y, por lo tanto, casi las mismas hectáreas.
+- Por eso un lote de 35,3 ha terminaba mostrando ~7 ha en cada una de las 5 zonas aunque visualmente una clase ocupara sólo 4–5 ha.
+
+Nuevo método
+- Se piden percentiles densos 2..98 para reconstruir la distribución NDVI del lote.
+- Sobre esa distribución se ejecuta clustering 1D determinista (k-means) con 3 o 5 grupos.
+- Los umbrales salen de los puntos medios entre centros de clusters naturales, no de porcentajes fijos de superficie.
+- Después se vuelve a consultar Sentinel Hub con esos umbrales para medir la proporción real de píxeles de cada zona.
+- Las hectáreas informadas son superficie despejada real × proporción medida de cada cluster.
+
+También
+- Free conserva NDVI 3 zonas y Contrastado dinámicos sobre su única imagen disponible; ya no caen en umbrales genéricos por el bloqueo del helper de estadísticas.
