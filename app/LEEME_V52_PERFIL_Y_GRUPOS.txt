@@ -1,0 +1,6 @@
+Growr360 v52
+
+1) Ejecutar GOOGLE_PROFILE_COMPLETION_V52.sql en Supabase antes de probar Google OAuth.
+2) Google ya no inventa “Sin apellido” ni “Google”: puede crear el perfil incompleto.
+3) Si falta nombre, apellido o usuario válido, Growr360 muestra una pantalla obligatoria que pide únicamente esos 3 datos.
+4) Se rediseñó por completo Buscar/Crear grupo: selector de modo, búsqueda con resultados expandibles y alta en 3 pasos, sin el layout anterior de dos paneles.

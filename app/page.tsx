@@ -805,8 +805,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
     const given=String(metadata.given_name??"").trim();
     const family=String(metadata.family_name??"").trim();
     const parts=fullName.split(/\s+/).filter(Boolean);
-    const firstName=given||parts[0]||"Usuario";
-    const lastName=family||parts.slice(1).join(" ")||"Google";
+    const firstName=given||parts[0]||"";
+    const lastName=family||parts.slice(1).join(" ")||"";
     const base=(email.split("@")[0]||`${firstName}.${lastName}`).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9._-]+/g,".").replace(/^\.+|\.+$/g,"").slice(0,24)||`usuario.${session.user.id.slice(0,6)}`;
     const {data:existing}=await supabase.from("profiles").select("id,avatar_path").eq("id",session.user.id).maybeSingle();
     if(existing){
@@ -882,6 +882,8 @@ function AuthenticatedApp({ session }: { session: Session }) {
   function closePlanWelcome(){ if(groupId){localStorage.setItem(`growr360-plan-welcome:${groupId}:${activePlan}`,"1");} setPlanWelcomeOpen(false); }
 
   if (loading) return <LoadingScreen text="Cargando tus campos y lotes…"/>;
+  const profileIncomplete = Boolean(profile && (!profile.first_name?.trim() || !profile.last_name?.trim() || !/^[a-z0-9._-]{3,30}$/.test(profile.username?.trim() ?? "")));
+  if (profile && profileIncomplete) return <ProfileCompletion profile={profile} onCompleted={(next)=>setProfile(next)}/>;
 
   const openView = (nextView: View) => { setView(nextView); setSidebarOpen(false); setGroupBrowserOpen(false); };
   const sidebarItem = (id: View, label: string, Icon: typeof Map, badge?: number) => <button key={id} className={`nav-subitem ${view === id ? "active" : ""}`} onClick={() => openView(id)}><Icon/><span>{label}</span>{badge ? <em>{badge}</em> : null}</button>;
@@ -2326,39 +2328,80 @@ function GroupBrowser({ memberships, onClose, onMembershipChanged }: {
 
   const createGroup=async(event:FormEvent)=>{event.preventDefault();setWorkingId("create");setBrowserError("");if(newGroupImage&&newGroupImage.size>5*1024*1024){setWorkingId("");setBrowserError("La imagen no puede superar los 5 MB.");return}const{data,error}=await supabase.rpc("create_group",{p_name:newGroup.name.trim(),p_description:newGroup.description.trim(),p_cuit:newGroup.cuit.replace(/\D/g,"")});if(error){setWorkingId("");setBrowserError(error.message);return}const created=relation(data as Group|Group[]|null);if(created?.id&&newGroupImage){const extension=(newGroupImage.name.split(".").pop()||"jpg").toLowerCase();const imagePath=`${created.id}/group-${Date.now()}.${extension}`;const uploaded=await supabase.storage.from("group-images").upload(imagePath,newGroupImage,{contentType:newGroupImage.type||"image/jpeg",upsert:false});if(uploaded.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos guardar la foto: ${uploaded.error.message}`);await onMembershipChanged();return}const updated=await supabase.from("groups").update({image_path:imagePath}).eq("id",created.id);if(updated.error){setWorkingId("");setBrowserError(`El grupo se creó, pero no pudimos vincular la foto: ${updated.error.message}`);await onMembershipChanged();return}}setWorkingId("");setMessage("Grupo creado. Ya podés empezar a configurarlo.");setNewGroup({name:"",description:"",cuit:""});setNewGroupImage(null);setCreateStep(1);await onMembershipChanged();setCreating(false);};
 
-  return <div className="record-detail-backdrop group-browser-backdrop">
-    <section className="group-browser">
-      <header className="group-browser-head group-browser-head-clean"><div><span className="eyebrow">ORGANIZACIONES</span><h2>{creating?"Crear un grupo":"Encontrá tu grupo"}</h2><p>{creating?"Configurá tu espacio de trabajo en pocos pasos.":"Buscá la organización donde trabajás y solicitá acceso."}</p></div><div><button className="soft-button create-group-shortcut" onClick={()=>{setCreating(value=>!value);setCreateStep(1);setBrowserError("");setMessage("")}}>{creating?<Search/>:<Plus/>}{creating?"Buscar grupo":"Crear grupo"}</button><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X/></button></div></header>
-      {!creating&&<div className="group-search-shell"><form className="group-search group-search-clean" onSubmit={event => { event.preventDefault(); void searchGroups(query); }}><Search/><input value={query} onChange={event => { setQuery(event.target.value); setResults([]); setSelectedId(""); setHasSearched(false); setBrowserError(""); }} placeholder="Nombre del grupo o CUIT" autoFocus/><button type="submit">Buscar</button></form><button className="group-refresh-link" type="button" onClick={onMembershipChanged}><RotateCcw/>Actualizar mis grupos</button></div>}
-      {message && <div className="group-message success"><Check/>{message}</div>}
-      {browserError && <div className="group-message error"><X/>{browserError}</div>}
-      {creating&&<form className="create-group-panel create-group-wizard" onSubmit={createGroup}><div className="create-group-progress"><div><span>Paso {createStep} de 3</span><strong>{createStep===1?"Datos principales":createStep===2?"Presentación":"Últimos detalles"}</strong></div><div className="create-group-progress-track"><i style={{width:`${createStep/3*100}%`}}/></div></div>{createStep===1&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><Building2/></span><div><h3>¿Cómo se llama tu organización?</h3><p>Estos datos identifican al grupo dentro de Growr360.</p></div></div><label>Nombre del grupo<input autoFocus required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. Establecimiento La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="11 dígitos"/></label></div>}{createStep===2&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><FileText/></span><div><h3>Contanos un poco más</h3><p>Una descripción corta ayuda al equipo a reconocer el espacio correcto.</p></div></div><label>Descripción<textarea autoFocus value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Ej. Producción agrícola y gestión de lotes de la empresa"/></label></div>}{createStep===3&&<div className="create-group-step"><div className="create-group-step-head"><span className="create-group-step-icon"><ImageIcon/></span><div><h3>Personalizá tu grupo</h3><p>La foto es opcional y podés cambiarla después desde configuración.</p></div></div><label className="create-group-photo-picker"><div className="create-group-image-preview">{newGroupImageUrl?<img src={newGroupImageUrl} alt="Vista previa del grupo"/>:<Tractor/>}</div><span><strong>{newGroupImage?newGroupImage.name:"Agregar foto"}</strong><small>JPG, PNG o WebP · máximo 5 MB</small></span><UploadCloud/><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setNewGroupImage(event.target.files?.[0]??null)}/></label><div className="create-group-summary"><div><small>Nombre</small><strong>{newGroup.name||"Sin nombre"}</strong></div><div><small>CUIT</small><strong>{newGroup.cuit||"Sin CUIT"}</strong></div></div></div>}<div className="create-group-wizard-actions">{createStep>1&&<button type="button" className="soft-button" onClick={()=>setCreateStep(step=>Math.max(1,step-1))}>Atrás</button>}<span/>{createStep<3?<button type="button" className="group-primary wizard-primary" disabled={createStep===1&&(!newGroup.name.trim()||newGroup.cuit.length!==11)} onClick={()=>setCreateStep(step=>Math.min(3,step+1))}>Continuar<ArrowRight/></button>:<button className="group-primary wizard-primary" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button>}</div></form>}
-      {!creating&&<>
-      <div className="group-browser-layout">
-        <div className="group-results">
-          <div className="group-results-title"><strong>{hasSearched ? "Resultados" : "Organizaciones"}</strong>{hasSearched && <small>{results.length} resultado{results.length===1?"":"s"}</small>}</div>
-          {loadingGroups ? <div className="group-loading"><LoaderCircle className="spin"/>Buscando grupos…</div> : !hasSearched ? <div className="group-empty"><Search/><strong>Buscá una organización</strong><small>Ingresá al menos dos caracteres del nombre o el CUIT.</small></div> : results.length === 0 ? <div className="group-empty"><Search/><strong>No encontramos grupos</strong><small>Probá con otro nombre o CUIT.</small></div> : results.map(row => {
-            const member = row.is_member || memberships.some(item => item.group_id === row.group_id);
-            const pending = row.has_pending_request || requests.some(item => item.group_id === row.group_id && item.status === "pending");
-            return <button type="button" key={row.group_id} className={`group-result-card ${selectedId === row.group_id ? "active" : ""}`} onClick={() => { setSelectedId(row.group_id); setMessage(""); setBrowserError(""); }}>
-              <div className="group-result-image">{images[row.group_id] ? <img src={images[row.group_id]} alt=""/> : <Tractor/>}</div>
-              <div><strong>{row.name}</strong><small>{row.description || "Grupo de trabajo agrícola"}</small><span>{member ? "Ya sos miembro" : pending ? "Solicitud pendiente" : "Disponible para solicitar acceso"}</span></div><ChevronRight/>
-            </button>;
+  return <div className="record-detail-backdrop group-browser-backdrop group-browser-v52-backdrop">
+    <section className="group-browser group-browser-v52">
+      <header className="group-v52-topbar">
+        <Brand/>
+        <button className="group-v52-close" onClick={onClose} aria-label="Cerrar"><X/></button>
+      </header>
+
+      <div className="group-v52-intro">
+        <span className="eyebrow">ESPACIOS DE TRABAJO</span>
+        <h2>{creating ? "Creá tu espacio en Growr360" : "¿Dónde vas a trabajar?"}</h2>
+        <p>{creating ? "Configurá lo esencial ahora. El resto lo podés completar más adelante." : "Unite a una organización existente o creá una nueva para tu establecimiento."}</p>
+      </div>
+
+      <div className="group-v52-mode-switch" role="tablist">
+        <button type="button" className={!creating?"active":""} onClick={()=>{setCreating(false);setBrowserError("");setMessage("")}}><Search/><span><strong>Buscar un grupo</strong><small>Solicitar acceso a una organización</small></span></button>
+        <button type="button" className={creating?"active":""} onClick={()=>{setCreating(true);setCreateStep(1);setBrowserError("");setMessage("")}}><Plus/><span><strong>Crear mi grupo</strong><small>Empezar un espacio desde cero</small></span></button>
+      </div>
+
+      {message && <div className="group-message success group-v52-message"><Check/>{message}</div>}
+      {browserError && <div className="group-message error group-v52-message"><X/>{browserError}</div>}
+
+      {!creating ? <div className="group-v52-search-view">
+        <form className="group-v52-search" onSubmit={event=>{event.preventDefault();void searchGroups(query)}}>
+          <Search/>
+          <input value={query} onChange={event=>{setQuery(event.target.value);setResults([]);setSelectedId("");setHasSearched(false);setBrowserError("")}} placeholder="Buscar por nombre o CUIT" autoFocus/>
+          <button type="submit">Buscar</button>
+        </form>
+
+        <div className="group-v52-search-meta"><span>{hasSearched ? `${results.length} resultado${results.length===1?"":"s"}` : "Ingresá al menos 2 caracteres"}</span><button type="button" onClick={onMembershipChanged}><RotateCcw/>Actualizar</button></div>
+
+        <div className="group-v52-results">
+          {loadingGroups ? <div className="group-v52-state"><LoaderCircle className="spin"/><strong>Buscando organizaciones…</strong></div> :
+          !hasSearched ? <div className="group-v52-state"><Search/><strong>Encontrá tu organización</strong><p>Buscá por el nombre del establecimiento, empresa o CUIT.</p></div> :
+          results.length===0 ? <div className="group-v52-state"><Users/><strong>No encontramos coincidencias</strong><p>Probá con otra búsqueda o creá un grupo nuevo.</p><button type="button" onClick={()=>{setCreating(true);setCreateStep(1)}}><Plus/>Crear un grupo</button></div> :
+          results.map(row=>{
+            const member=row.is_member||memberships.some(item=>item.group_id===row.group_id);
+            const pending=row.has_pending_request||requests.some(item=>item.group_id===row.group_id&&item.status==="pending");
+            const open=selectedId===row.group_id;
+            return <article key={row.group_id} className={`group-v52-result ${open?"open":""}`}>
+              <button type="button" className="group-v52-result-main" onClick={()=>{setSelectedId(open?"":row.group_id);setMessage("");setBrowserError("")}}>
+                <div className="group-v52-result-avatar">{images[row.group_id]?<img src={images[row.group_id]} alt=""/>:<Building2/>}</div>
+                <div className="group-v52-result-copy"><strong>{row.name}</strong><small>{row.description||"Organización agrícola en Growr360"}</small><span className={member?"member":pending?"pending":"available"}>{member?"Ya sos miembro":pending?"Solicitud pendiente":"Disponible para solicitar acceso"}</span></div>
+                <ChevronRight className={open?"rotated":""}/>
+              </button>
+              {open && <div className="group-v52-result-detail">
+                <div className="group-v52-facts"><div><small>CUIT</small><strong>{row.cuit||"No informado"}</strong></div><div><small>Responsable</small><strong>{row.creator_name||row.creator_username||"Administrador del grupo"}</strong></div></div>
+                {!member&&!pending&&<label className="group-v52-role"><span>Rol solicitado</span><select value={requestedRole} onChange={event=>setRequestedRole(event.target.value)}><option value="producer">Productor / Cliente</option><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operador</option></select></label>}
+                <div className="group-v52-result-actions">{member?<button disabled><Check/>Ya pertenecés a este grupo</button>:pending?<><button disabled><LoaderCircle/>Esperando aprobación</button>{pendingRequest&&<button className="secondary" onClick={()=>void cancelRequest()} disabled={workingId===row.group_id}>Cancelar solicitud</button>}</>:<button onClick={()=>void sendRequest()} disabled={workingId===row.group_id}>{workingId===row.group_id?<LoaderCircle className="spin"/>:<ArrowRight/>}Solicitar acceso</button>}</div>
+              </div>}
+            </article>
           })}
         </div>
-        <aside className="group-detail">
-          {!selected ? <div className="group-empty"><Users/><strong>Seleccioná un grupo</strong><small>Vas a poder revisar sus datos antes de solicitar acceso.</small></div> : <>
-            <div className="group-detail-cover">{images[selected.group_id] ? <img src={images[selected.group_id]} alt={`Foto de ${selected.name}`}/> : <div><Tractor/></div>}<span className={isMember ? "member" : isPending ? "pending" : "open"}>{isMember ? "Sos miembro" : isPending ? "Solicitud pendiente" : "Acepta solicitudes"}</span></div>
-            <div className="group-detail-copy"><span className="eyebrow">GRUPO</span><h3>{selected.name}</h3><p>{selected.description || "Este grupo todavía no agregó una descripción."}</p></div>
-            <div className="group-facts"><div><small>Creado por</small><strong>{selected.creator_name || selected.creator_username || "Equipo administrador"}</strong></div><div><small>CUIT</small><strong>{selected.cuit || "No informado"}</strong></div></div>
-            {!isMember && !isPending && <label className="group-role-picker"><span>Quiero ingresar como</span><select value={requestedRole} onChange={event => setRequestedRole(event.target.value)}><option value="producer">Productor / Cliente</option><option value="agronomist">Ingeniero / Agrónomo</option><option value="operator">Operador</option></select><small>El administrador podrá ajustar tu rol y permisos al aceptarte.</small></label>}
-            {isMember ? <button className="group-primary disabled" disabled><Check/>Ya pertenecés a este grupo</button> : isPending ? <><button className="group-primary disabled" disabled><LoaderCircle/>Solicitud pendiente de aprobación</button>{pendingRequest && <button className="group-cancel" onClick={() => void cancelRequest()} disabled={workingId === selected.group_id}>Cancelar solicitud</button>}</> : <button className="group-primary" onClick={() => void sendRequest()} disabled={workingId === selected.group_id}>{workingId === selected.group_id ? <LoaderCircle className="spin"/> : <ArrowRight/>}Enviar solicitud</button>}
-          </>}
-        </aside>
-      </div>
-      </>}
+      </div> : <form className="group-v52-create" onSubmit={createGroup}>
+        <div className="group-v52-steps"><span className={createStep>=1?"active":""}>1</span><i className={createStep>=2?"active":""}/><span className={createStep>=2?"active":""}>2</span><i className={createStep>=3?"active":""}/><span className={createStep>=3?"active":""}>3</span></div>
+
+        {createStep===1&&<div className="group-v52-create-step"><div className="group-v52-step-copy"><small>PASO 1 DE 3</small><h3>Identificá tu organización</h3><p>Usá el nombre con el que tu equipo la reconoce habitualmente.</p></div><label>Nombre del grupo<input autoFocus required minLength={2} value={newGroup.name} onChange={event=>setNewGroup({...newGroup,name:event.target.value})} placeholder="Ej. La Esperanza"/></label><label>CUIT<input required inputMode="numeric" value={newGroup.cuit} onChange={event=>setNewGroup({...newGroup,cuit:event.target.value.replace(/\D/g,"").slice(0,11)})} placeholder="00-00000000-0"/><small>{newGroup.cuit.length}/11 dígitos</small></label></div>}
+        {createStep===2&&<div className="group-v52-create-step"><div className="group-v52-step-copy"><small>PASO 2 DE 3</small><h3>Agregá una referencia</h3><p>Es opcional, pero ayuda a distinguir el grupo cuando alguien lo busca.</p></div><label>Descripción<textarea autoFocus value={newGroup.description} onChange={event=>setNewGroup({...newGroup,description:event.target.value})} placeholder="Producción agrícola, zona, empresa o una breve referencia…"/></label></div>}
+        {createStep===3&&<div className="group-v52-create-step"><div className="group-v52-step-copy"><small>PASO 3 DE 3</small><h3>Terminá de personalizarlo</h3><p>La imagen es opcional. Después vas a poder cambiar todos estos datos.</p></div><label className="group-v52-upload"><div>{newGroupImageUrl?<img src={newGroupImageUrl} alt="Vista previa"/>:<ImageIcon/>}</div><span><strong>{newGroupImage?newGroupImage.name:"Subir imagen del grupo"}</strong><small>JPG, PNG o WebP · hasta 5 MB</small></span><UploadCloud/><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>setNewGroupImage(event.target.files?.[0]??null)}/></label><div className="group-v52-review"><div><small>Grupo</small><strong>{newGroup.name}</strong></div><div><small>CUIT</small><strong>{newGroup.cuit}</strong></div>{newGroup.description&&<div className="wide"><small>Descripción</small><strong>{newGroup.description}</strong></div>}</div></div>}
+
+        <footer className="group-v52-create-actions"><button type="button" className="secondary" onClick={()=>createStep===1?setCreating(false):setCreateStep(step=>Math.max(1,step-1))}>{createStep===1?"Volver a buscar":"Atrás"}</button>{createStep<3?<button type="button" disabled={createStep===1&&(!newGroup.name.trim()||newGroup.cuit.length!==11)} onClick={()=>setCreateStep(step=>Math.min(3,step+1))}>Continuar<ArrowRight/></button>:<button type="submit" disabled={workingId==="create"}>{workingId==="create"?<LoaderCircle className="spin"/>:<Plus/>}Crear grupo</button>}</footer>
+      </form>}
     </section>
   </div>;
+}
+
+function ProfileCompletion({profile,onCompleted}:{profile:Profile;onCompleted:(profile:Profile)=>void}) {
+  const [firstName,setFirstName]=useState(profile.first_name??"");
+  const [lastName,setLastName]=useState(profile.last_name??"");
+  const [username,setUsername]=useState(profile.username??"");
+  const [busy,setBusy]=useState(false);
+  const [message,setMessage]=useState("");
+  const validUsername=/^[a-z0-9._-]{3,30}$/.test(username.trim().toLowerCase());
+  const save=async(event:FormEvent)=>{event.preventDefault();setMessage("");const first=firstName.trim(),last=lastName.trim(),user=username.trim().toLowerCase();if(!first||!last)return setMessage("Completá tu nombre y apellido para continuar.");if(!validUsername)return setMessage("El usuario debe tener entre 3 y 30 caracteres y usar solo letras, números, punto, guion o guion bajo.");setBusy(true);const result=await supabase.rpc("complete_own_profile",{p_first_name:first,p_last_name:last,p_username:user});if(result.error){setBusy(false);setMessage(/duplicate|unique/i.test(result.error.message)?"Ese nombre de usuario ya está en uso.":result.error.message);return}const next={...profile,first_name:first,last_name:last,username:user};onCompleted(next);setBusy(false);};
+  return <div className="profile-completion-page"><section className="profile-completion-card"><Brand/><div className="profile-completion-copy"><span className="eyebrow">UN ÚLTIMO PASO</span><h1>Completá tu perfil</h1><p>Necesitamos estos tres datos antes de entrar a tu espacio de trabajo.</p></div><form onSubmit={save}><div className="profile-completion-pair"><label>Nombre<input autoFocus value={firstName} onChange={e=>setFirstName(e.target.value)} placeholder="Tu nombre" maxLength={80}/></label><label>Apellido<input value={lastName} onChange={e=>setLastName(e.target.value)} placeholder="Tu apellido" maxLength={80}/></label></div><label>Nombre de usuario<div className="profile-completion-username"><span>@</span><input value={username} onChange={e=>setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g,""))} placeholder="nombre.usuario" maxLength={30}/></div><small>Va a identificarte dentro de los grupos de Growr360.</small></label>{message&&<div className="profile-completion-error">{message}</div>}<button disabled={busy||!firstName.trim()||!lastName.trim()||!validUsername}>{busy?<LoaderCircle className="spin"/>:<ArrowRight/>}{busy?"Guardando…":"Continuar a Growr360"}</button></form></section></div>;
 }
 
 function Brand() {
