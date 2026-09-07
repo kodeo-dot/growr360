@@ -1,3 +1,4 @@
+import { requireGroupPermission } from "../_permissions";
 import { planetInsightsToken, imageDimensions, satelliteEvalscript, unwrapGeometry } from "../../../../lib/copernicus";
 
 export const runtime = "nodejs";
@@ -58,7 +59,10 @@ function evaluatePixel(s){if(!s.dataMask||[1,3,8,9,10,11].includes(s.SCL))return
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json() as { geometry: Parameters<typeof unwrapGeometry>[0]; date: string; index?: string; thumbnail?: boolean; thresholds?: Thresholds };
+    const payload = await request.json() as { groupId?:string; geometry: Parameters<typeof unwrapGeometry>[0]; date: string; index?: string; thumbnail?: boolean; thresholds?: Thresholds };
+    const satelliteAccess=await requireGroupPermission(request,String(payload.groupId??""),"view_satellite");
+    if(!satelliteAccess.ok)return Response.json({error:satelliteAccess.error},{status:satelliteAccess.status});
+    if((payload.index??"NDVI")!=="RGB"){const ndviAccess=await requireGroupPermission(request,String(payload.groupId??""),"view_ndvi");if(!ndviAccess.ok)return Response.json({error:ndviAccess.error},{status:ndviAccess.status});}
     const geometry = unwrapGeometry(payload.geometry);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.date ?? "")) throw new Error("La fecha satelital no es válida.");
     const token = await planetInsightsToken();

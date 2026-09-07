@@ -1,3 +1,4 @@
+import { requireGroupPermission } from "../_permissions";
 import { NextResponse } from "next/server";
 import { planetInsightsToken, unwrapGeometry } from "../../../../lib/copernicus";
 
@@ -6,6 +7,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const access=await requireGroupPermission(request,String(payload.groupId??""),"view_satellite");
+    if(!access.ok)return NextResponse.json({error:access.error},{status:access.status});
     const geometry = unwrapGeometry(payload.geometry);
     const token = await planetInsightsToken();
     const to = new Date();

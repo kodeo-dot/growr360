@@ -1,3 +1,4 @@
+import { requireGroupPermission } from "../_permissions";
 import { NextResponse } from "next/server";
 import { planetInsightsToken, unwrapGeometry } from "../../../../lib/copernicus";
 
@@ -184,7 +185,11 @@ async function requestZoneShares(token: string, geometry: Geometry, date: string
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json() as { geometry: Parameters<typeof unwrapGeometry>[0]; date: string; zoneCount?: 3 | 5 };
+    const payload = await request.json() as { groupId?:string; geometry: Parameters<typeof unwrapGeometry>[0]; date: string; zoneCount?: 3 | 5 };
+    const satelliteAccess=await requireGroupPermission(request,String(payload.groupId??""),"view_satellite");
+    if(!satelliteAccess.ok)return NextResponse.json({error:satelliteAccess.error},{status:satelliteAccess.status});
+    const ndviAccess=await requireGroupPermission(request,String(payload.groupId??""),"view_ndvi");
+    if(!ndviAccess.ok)return NextResponse.json({error:ndviAccess.error},{status:ndviAccess.status});
     const geometry = unwrapGeometry(payload.geometry);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.date ?? "")) throw new Error("La fecha satelital no es válida.");
     const zoneCount = payload.zoneCount === 5 ? 5 : 3;

@@ -1,0 +1,13 @@
+Growr360 v73 — permisos estrictos
+
+- Los overrides personalizados tienen prioridad sobre el rol, también en admins.
+- view_satellite=false oculta y bloquea imágenes satelitales.
+- view_ndvi=false permite solamente RGB si view_satellite=true.
+- view_fields=false bloquea Mapa/Campos.
+- view_records=false bloquea Registros, Monitoreos, Napas, OTs y Reportes.
+- create_records/create_monitoring ocultan acciones rápidas correspondientes.
+- export_reports=false oculta exportaciones PDF/ZIP.
+- manage_members=false limita administración del equipo aunque el rol sea admin.
+- Las APIs satelitales validan el permiso del usuario en servidor.
+
+Ejecutar PERMISSIONS_ENFORCEMENT_V73.sql en Supabase antes de publicar.
